@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Regra: Commits por Tarefa
+
+Cada tarefa deve resultar em 1 commit, com mensagem no formato:
+
+- feat: [ação]
+- fix: [problema resolvido]
+
+Exemplos:
+- feat: adicionar tela de login
+- fix: corrigir bug no cálculo de juros
+
+Essa prática facilita o rastreamento de mudanças e a revisão do histórico do projeto.
+

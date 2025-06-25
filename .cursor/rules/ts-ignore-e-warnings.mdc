@@ -1,0 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Regra: Uso de @ts-ignore e Tratamento de Warnings
+
+Nunca utilize `@ts-ignore` sem comentar o motivo logo acima da diretiva. Ignorar erros de TypeScript sem explicação dificulta a manutenção e pode mascarar problemas reais.
+
+Além disso, warnings devem ser tratados com a mesma seriedade que erros. Sempre corrija os avisos do compilador/linter antes de prosseguir.
+
+Essas práticas garantem maior qualidade, segurança e previsibilidade no código.
+

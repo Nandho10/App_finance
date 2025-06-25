@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Regra: Implementação de Funcionalidades
+
+Sempre implemente uma funcionalidade por vez. Divida prompts grandes e confirme o escopo antes de gerar código.
+
+Essas práticas garantem maior clareza, rastreabilidade e qualidade nas entregas, além de facilitar revisões e manutenibilidade do código.
+

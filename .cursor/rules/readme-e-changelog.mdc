@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Regra: Atualização de README e Changelog
+
+Toda nova funcionalidade precisa estar explicada no `README.md`, e mudanças devem ser listadas no `CHANGELOG.md`.
+
+Essas práticas garantem documentação atualizada, facilitando o onboarding de novos desenvolvedores e o acompanhamento da evolução do projeto.
+
