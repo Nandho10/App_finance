@@ -38,7 +38,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'core',
 ]
+
+AUTH_USER_MODEL = 'core.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -79,7 +82,7 @@ DATABASES = {
         'NAME': os.environ.get('POSTGRES_DB', 'financeiro_db'),
         'USER': os.environ.get('POSTGRES_USER', 'financeiro_user'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'financeiro_pass'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'HOST': os.environ.get('POSTGRES_HOST', 'db'),
         'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
