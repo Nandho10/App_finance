@@ -7,46 +7,79 @@ import TransactionChart from '@/components/TransactionChart';
 import RecentTransactions from '@/components/RecentTransactions';
 import BudgetProgress from '@/components/BudgetProgress';
 import { DashboardData } from '@/types/dashboard';
+import { dashboardService } from '@/services/api';
 
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simular dados do dashboard (será substituído pela API real)
-    const mockData: DashboardData = {
-      balance: 15420.50,
-      income: 8500.00,
-      expenses: 3200.00,
-      savings: 2200.00,
-      transactions: [
-        { id: 1, description: 'Salário', amount: 8500.00, type: 'income', date: '2024-01-15', category: 'Salário' },
-        { id: 2, description: 'Supermercado', amount: -450.00, type: 'expense', date: '2024-01-14', category: 'Alimentação' },
-        { id: 3, description: 'Combustível', amount: -200.00, type: 'expense', date: '2024-01-13', category: 'Transporte' },
-        { id: 4, description: 'Freelance', amount: 1200.00, type: 'income', date: '2024-01-12', category: 'Trabalho' },
-      ],
-      budgetProgress: [
-        { category: 'Alimentação', spent: 450, limit: 800, percentage: 56 },
-        { category: 'Transporte', spent: 200, limit: 400, percentage: 50 },
-        { category: 'Lazer', spent: 150, limit: 300, percentage: 50 },
-      ],
-      chartData: [
-        { name: 'Jan', income: 8500, expenses: 3200 },
-        { name: 'Fev', income: 7800, expenses: 2900 },
-        { name: 'Mar', income: 9200, expenses: 3500 },
-      ]
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Buscar dados da API Django
+        const data = await dashboardService.getDashboardData();
+        setDashboardData(data);
+      } catch (err) {
+        console.error('Erro ao carregar dados do dashboard:', err);
+        setError('Erro ao carregar dados do dashboard. Verifique se o backend está rodando.');
+        
+        // Fallback para dados mockados em caso de erro
+        const mockData: DashboardData = {
+          balance: 15420.50,
+          income: 8500.00,
+          expenses: 3200.00,
+          savings: 2200.00,
+          transactions: [
+            { id: 1, description: 'Salário', amount: 8500.00, type: 'income', date: '2024-01-15', category: 'Salário' },
+            { id: 2, description: 'Supermercado', amount: -450.00, type: 'expense', date: '2024-01-14', category: 'Alimentação' },
+            { id: 3, description: 'Combustível', amount: -200.00, type: 'expense', date: '2024-01-13', category: 'Transporte' },
+            { id: 4, description: 'Freelance', amount: 1200.00, type: 'income', date: '2024-01-12', category: 'Trabalho' },
+          ],
+          budgetProgress: [
+            { category: 'Alimentação', spent: 450, limit: 800, percentage: 56 },
+            { category: 'Transporte', spent: 200, limit: 400, percentage: 50 },
+            { category: 'Lazer', spent: 150, limit: 300, percentage: 50 },
+          ],
+          chartData: [
+            { name: 'Jan', income: 8500, expenses: 3200 },
+            { name: 'Fev', income: 7800, expenses: 2900 },
+            { name: 'Mar', income: 9200, expenses: 3500 },
+          ]
+        };
+        setDashboardData(mockData);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    setTimeout(() => {
-      setDashboardData(mockData);
-      setLoading(false);
-    }, 1000);
+    fetchDashboardData();
   }, []);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <p className="font-bold">Erro!</p>
+            <p>{error}</p>
+          </div>
+          <p className="text-gray-600">Usando dados de demonstração...</p>
+        </div>
       </div>
     );
   }
