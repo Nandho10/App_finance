@@ -17,6 +17,17 @@ Todas as mudanças importantes do projeto serão documentadas aqui.
   - `DELETE /api/sales/{id}/delete/` - Excluir venda
 - **Validações Robustas**: Validação de campos obrigatórios, formatos de data e valores numéricos
 - **Filtros Avançados**: Filtros por data, produto/serviço e forma de recebimento
+- **Frontend Completo**: Interface de usuário para gestão de vendas
+  - Página de listagem com tabela responsiva
+  - Modal para criar e editar vendas
+  - Filtros por período, produto/serviço e forma de recebimento
+  - Cards de resumo com totais (vendas, custos, lucro bruto)
+  - Integração completa com a API REST
+  - Validações em tempo real no formulário
+  - Cálculo automático de lucro bruto
+- **Tipos TypeScript**: Definições completas de tipos para vendas
+- **Serviços de API**: Funções para comunicação com o backend
+- **Navegação**: Link de vendas adicionado ao Sidebar
 
 ### Alterado
 - **Remoção de Modelo Duplicado**: Eliminado o modelo `Sale` antigo para evitar conflitos

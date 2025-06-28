@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, F, Count
 from django.utils import timezone
 from django.core.serializers import serialize
 from django.forms.models import model_to_dict
@@ -2149,6 +2149,241 @@ def sale_delete(request, sale_id):
             'success': False,
             'error': 'Venda não encontrada'
         }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+# ==================== KPIs E RELATÓRIOS DE VENDAS ====================
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def sales_kpis(request):
+    """KPIs principais de vendas"""
+    try:
+        # Parâmetros de filtro
+        month = request.GET.get('month')
+        year = request.GET.get('year')
+        
+        # Se não especificado, usar mês atual
+        if not month or not year:
+            today = timezone.now().date()
+            month = today.month
+            year = today.year
+        
+        # Filtrar vendas do período
+        vendas = Venda.objects.filter(
+            data__year=year,
+            data__month=month
+        )
+        
+        # Calcular KPIs
+        total_vendas = vendas.aggregate(
+            total=Sum('valor_venda')
+        )['total'] or 0
+        
+        total_custos = vendas.aggregate(
+            total=Sum('custo')
+        )['total'] or 0
+        
+        total_lucro = total_vendas - total_custos
+        
+        quantidade_vendas = vendas.count()
+        
+        ticket_medio = total_vendas / quantidade_vendas if quantidade_vendas > 0 else 0
+        
+        # Margem de lucro
+        margem_lucro = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
+        
+        # Mês anterior para comparação
+        if month == 1:
+            prev_month = 12
+            prev_year = year - 1
+        else:
+            prev_month = month - 1
+            prev_year = year
+        
+        vendas_anterior = Venda.objects.filter(
+            data__year=prev_year,
+            data__month=prev_month
+        ).aggregate(
+            total=Sum('valor_venda')
+        )['total'] or 0
+        
+        # Crescimento percentual
+        crescimento = 0
+        if vendas_anterior > 0:
+            crescimento = ((total_vendas - vendas_anterior) / vendas_anterior) * 100
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'total_vendas': float(total_vendas),
+                'total_custos': float(total_custos),
+                'total_lucro': float(total_lucro),
+                'quantidade_vendas': quantidade_vendas,
+                'ticket_medio': float(ticket_medio),
+                'margem_lucro': float(margem_lucro),
+                'crescimento_percentual': float(crescimento),
+                'periodo': f"{year}-{month:02d}"
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def sales_by_product(request):
+    """Vendas por produto/serviço"""
+    try:
+        # Parâmetros de filtro
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        limit = int(request.GET.get('limit', 10))
+        
+        # Query base
+        vendas = Venda.objects.all()
+        
+        # Aplicar filtros de data
+        if start_date:
+            vendas = vendas.filter(data__gte=start_date)
+        if end_date:
+            vendas = vendas.filter(data__lte=end_date)
+        
+        # Agrupar por produto/serviço
+        produtos_data = vendas.values('produto_servico').annotate(
+            total_vendas=Sum('valor_venda'),
+            total_custos=Sum('custo'),
+            quantidade=Count('id')
+        ).annotate(
+            lucro_bruto=F('total_vendas') - F('total_custos')
+        ).order_by('-total_vendas')[:limit]
+        
+        # Calcular totais para percentuais
+        total_geral = vendas.aggregate(
+            total=Sum('valor_venda')
+        )['total'] or 0
+        
+        # Formatar dados
+        produtos = []
+        for produto in produtos_data:
+            percentual = (produto['total_vendas'] / total_geral * 100) if total_geral > 0 else 0
+            produtos.append({
+                'produto_servico': produto['produto_servico'],
+                'total_vendas': float(produto['total_vendas']),
+                'total_custos': float(produto['total_custos']),
+                'lucro_bruto': float(produto['lucro_bruto']),
+                'quantidade': produto['quantidade'],
+                'percentual': float(percentual)
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': produtos,
+            'total_geral': float(total_geral)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def sales_evolution(request):
+    """Evolução mensal das vendas"""
+    try:
+        # Parâmetros
+        months = int(request.GET.get('months', 6))
+        
+        # Calcular data de início
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=months * 30)
+        
+        # Buscar vendas agrupadas por mês
+        vendas_mensais = Venda.objects.filter(
+            data__gte=start_date,
+            data__lte=end_date
+        ).extra(
+            select={'year_month': "EXTRACT(year FROM data) || '-' || LPAD(EXTRACT(month FROM data)::text, 2, '0')"}
+        ).values('year_month').annotate(
+            total_vendas=Sum('valor_venda'),
+            total_custos=Sum('custo'),
+            quantidade=Count('id')
+        ).annotate(
+            lucro_bruto=F('total_vendas') - F('total_custos')
+        ).order_by('year_month')
+        
+        # Formatar dados
+        evolution = []
+        for venda in vendas_mensais:
+            evolution.append({
+                'periodo': venda['year_month'],
+                'total_vendas': float(venda['total_vendas']),
+                'total_custos': float(venda['total_custos']),
+                'lucro_bruto': float(venda['lucro_bruto']),
+                'quantidade': venda['quantidade']
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': evolution
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def top_sales_products(request):
+    """Top produtos/serviços por lucro"""
+    try:
+        # Parâmetros
+        limit = int(request.GET.get('limit', 5))
+        months = int(request.GET.get('months', 6))
+        
+        # Calcular data de início
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=months * 30)
+        
+        # Buscar top produtos por lucro
+        top_produtos = Venda.objects.filter(
+            data__gte=start_date,
+            data__lte=end_date
+        ).values('produto_servico').annotate(
+            total_vendas=Sum('valor_venda'),
+            total_custos=Sum('custo'),
+            quantidade=Count('id')
+        ).annotate(
+            lucro_bruto=F('total_vendas') - F('total_custos')
+        ).order_by('-lucro_bruto')[:limit]
+        
+        # Formatar dados
+        produtos = []
+        for produto in top_produtos:
+            produtos.append({
+                'produto_servico': produto['produto_servico'],
+                'total_vendas': float(produto['total_vendas']),
+                'total_custos': float(produto['total_custos']),
+                'lucro_bruto': float(produto['lucro_bruto']),
+                'quantidade': produto['quantidade'],
+                'margem_lucro': float((produto['lucro_bruto'] / produto['total_vendas'] * 100) if produto['total_vendas'] > 0 else 0)
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': produtos
+        })
+        
     except Exception as e:
         return JsonResponse({
             'success': False,

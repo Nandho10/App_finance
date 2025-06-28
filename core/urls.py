@@ -75,4 +75,10 @@ urlpatterns = [
     path('api/sales/<int:sale_id>/', views.sale_detail, name='sale_detail'),
     path('api/sales/<int:sale_id>/update/', views.sale_update, name='sale_update'),
     path('api/sales/<int:sale_id>/delete/', views.sale_delete, name='sale_delete'),
+    
+    # API Endpoints - KPIs e Relatórios de Vendas
+    path('api/sales-kpis/', views.sales_kpis, name='sales_kpis'),
+    path('api/sales-by-product/', views.sales_by_product, name='sales_by_product'),
+    path('api/sales-evolution/', views.sales_evolution, name='sales_evolution'),
+    path('api/top-sales-products/', views.top_sales_products, name='top_sales_products'),
 ] 

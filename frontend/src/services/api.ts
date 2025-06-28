@@ -3,7 +3,7 @@ import { DashboardData, Transaction, BudgetProgress, ChartData } from '@/types/d
 import { Expense, CreateExpenseData, UpdateExpenseData, ExpenseFilters } from '@/types/expense';
 import { Income, CreateIncomeData, UpdateIncomeData, IncomeFilters } from '@/types/income';
 import { Budget, CreateBudgetData, UpdateBudgetData, BudgetAlert, BudgetAnalysis } from '@/types/budget';
-import { Sale, SaleFormData, SalesFilters } from '@/types/sale';
+import { Sale, SaleFormData, SalesFilters, SalesKPIs, SalesByProduct, SalesEvolution, TopSalesProduct } from '@/types/sale';
 
 // Configuração base do axios
 const api = axios.create({
@@ -298,6 +298,34 @@ export const salesService = {
   // Deletar venda
   deleteSale: async (id: number): Promise<void> => {
     await api.delete(`/api/sales/${id}/delete/`);
+  },
+
+  // KPIs de vendas
+  getKPIs: async (params?: { month?: string; year?: string }): Promise<SalesKPIs> => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    const response = await api.get(`/api/sales-kpis/${query}`);
+    return response.data.data || response.data;
+  },
+
+  // Vendas por produto
+  getByProduct: async (params?: { start_date?: string; end_date?: string; limit?: number }): Promise<SalesByProduct[]> => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    const response = await api.get(`/api/sales-by-product/${query}`);
+    return response.data.data || response.data;
+  },
+
+  // Evolução mensal das vendas
+  getEvolution: async (months?: number): Promise<SalesEvolution[]> => {
+    const query = months ? `?months=${months}` : '';
+    const response = await api.get(`/api/sales-evolution/${query}`);
+    return response.data.data || response.data;
+  },
+
+  // Top produtos por lucro
+  getTopProducts: async (params?: { limit?: number; months?: number }): Promise<TopSalesProduct[]> => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    const response = await api.get(`/api/top-sales-products/${query}`);
+    return response.data.data || response.data;
   },
 };
 
