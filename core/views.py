@@ -15,6 +15,7 @@ from django.db import transaction
 # Importar modelos
 from .models.category_models import Category
 from .models.transaction_models import Income, Expense
+from .models.sales_models import Venda
 from .models.user_models import User
 
 # Simulação de dados para o MVP (será substituído por dados reais do banco)
@@ -1893,3 +1894,263 @@ def top_expense_categories(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+# ==================== VENDAS ====================
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def sales_list(request):
+    """Listar todas as vendas com filtros opcionais"""
+    try:
+        # Parâmetros de filtro
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        produto_servico = request.GET.get('produto_servico')
+        forma_recebimento = request.GET.get('forma_recebimento')
+        
+        # Query base
+        vendas = Venda.objects.all()
+        
+        # Aplicar filtros
+        if start_date:
+            vendas = vendas.filter(data__gte=start_date)
+        if end_date:
+            vendas = vendas.filter(data__lte=end_date)
+        if produto_servico:
+            vendas = vendas.filter(produto_servico__icontains=produto_servico)
+        if forma_recebimento:
+            vendas = vendas.filter(forma_recebimento=forma_recebimento)
+        
+        # Ordenar por data (mais recente primeiro)
+        vendas = vendas.order_by('-data')
+        
+        # Serializar dados
+        sales_data = []
+        for venda in vendas:
+            sales_data.append({
+                'id': venda.id,
+                'data': venda.data.strftime('%Y-%m-%d'),
+                'produto_servico': venda.produto_servico,
+                'valor_venda': float(venda.valor_venda),
+                'custo': float(venda.custo),
+                'lucro_bruto': float(venda.lucro_bruto),
+                'forma_recebimento': venda.forma_recebimento,
+                'observacoes': venda.observacoes or '',
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'data': sales_data,
+            'total': len(sales_data)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def sale_create(request):
+    """Criar nova venda"""
+    try:
+        data = json.loads(request.body)
+        
+        # Validações básicas
+        required_fields = ['data', 'produto_servico', 'valor_venda', 'custo', 'forma_recebimento']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Campo obrigatório: {field}'
+                }, status=400)
+        
+        # Validar valores numéricos
+        try:
+            valor_venda = Decimal(str(data['valor_venda']))
+            custo = Decimal(str(data['custo']))
+        except (ValueError, TypeError):
+            return JsonResponse({
+                'success': False,
+                'error': 'Valor da venda e custo devem ser números válidos'
+            }, status=400)
+        
+        # Validar data
+        try:
+            data_venda = datetime.strptime(data['data'], '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Data deve estar no formato YYYY-MM-DD'
+            }, status=400)
+        
+        # Criar venda
+        venda = Venda.objects.create(
+            data=data_venda,
+            produto_servico=data['produto_servico'],
+            valor_venda=valor_venda,
+            custo=custo,
+            forma_recebimento=data['forma_recebimento'],
+            observacoes=data.get('observacoes', '')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'id': venda.id,
+                'data': venda.data.strftime('%Y-%m-%d'),
+                'produto_servico': venda.produto_servico,
+                'valor_venda': float(venda.valor_venda),
+                'custo': float(venda.custo),
+                'lucro_bruto': float(venda.lucro_bruto),
+                'forma_recebimento': venda.forma_recebimento,
+                'observacoes': venda.observacoes or '',
+            },
+            'message': 'Venda criada com sucesso'
+        }, status=201)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'JSON inválido'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def sale_detail(request, sale_id):
+    """Obter detalhes de uma venda específica"""
+    try:
+        venda = Venda.objects.get(id=sale_id)
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'id': venda.id,
+                'data': venda.data.strftime('%Y-%m-%d'),
+                'produto_servico': venda.produto_servico,
+                'valor_venda': float(venda.valor_venda),
+                'custo': float(venda.custo),
+                'lucro_bruto': float(venda.lucro_bruto),
+                'forma_recebimento': venda.forma_recebimento,
+                'observacoes': venda.observacoes or '',
+            }
+        })
+        
+    except Venda.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Venda não encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def sale_update(request, sale_id):
+    """Atualizar uma venda existente"""
+    try:
+        venda = Venda.objects.get(id=sale_id)
+        data = json.loads(request.body)
+        
+        # Atualizar campos se fornecidos
+        if 'data' in data:
+            try:
+                venda.data = datetime.strptime(data['data'], '%Y-%m-%d').date()
+            except ValueError:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Data deve estar no formato YYYY-MM-DD'
+                }, status=400)
+        
+        if 'produto_servico' in data:
+            venda.produto_servico = data['produto_servico']
+        
+        if 'valor_venda' in data:
+            try:
+                venda.valor_venda = Decimal(str(data['valor_venda']))
+            except (ValueError, TypeError):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Valor da venda deve ser um número válido'
+                }, status=400)
+        
+        if 'custo' in data:
+            try:
+                venda.custo = Decimal(str(data['custo']))
+            except (ValueError, TypeError):
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Custo deve ser um número válido'
+                }, status=400)
+        
+        if 'forma_recebimento' in data:
+            venda.forma_recebimento = data['forma_recebimento']
+        
+        if 'observacoes' in data:
+            venda.observacoes = data['observacoes']
+        
+        venda.save()
+        
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'id': venda.id,
+                'data': venda.data.strftime('%Y-%m-%d'),
+                'produto_servico': venda.produto_servico,
+                'valor_venda': float(venda.valor_venda),
+                'custo': float(venda.custo),
+                'lucro_bruto': float(venda.lucro_bruto),
+                'forma_recebimento': venda.forma_recebimento,
+                'observacoes': venda.observacoes or '',
+            },
+            'message': 'Venda atualizada com sucesso'
+        })
+        
+    except Venda.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Venda não encontrada'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'JSON inválido'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def sale_delete(request, sale_id):
+    """Excluir uma venda"""
+    try:
+        venda = Venda.objects.get(id=sale_id)
+        venda.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Venda excluída com sucesso'
+        })
+        
+    except Venda.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Venda não encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
