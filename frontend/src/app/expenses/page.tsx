@@ -6,6 +6,7 @@ import { expenseService } from '@/services/api';
 import ExpenseModal from '@/components/ExpenseModal';
 import ExpenseFiltersComponent from '@/components/ExpenseFilters';
 import ExpenseReports from '@/components/ExpenseReports';
+import { useRef } from 'react';
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -13,8 +14,10 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [filters, setFilters] = useState<ExpenseFilters>({});
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'reports'>('list');
+  const [filters, setFilters] = useState<ExpenseFilters>({});
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
   useEffect(() => {
     loadExpenses();
@@ -136,12 +139,37 @@ export default function ExpensesPage() {
     if (!confirm('Tem certeza que deseja deletar esta despesa?')) return;
     
     try {
+      console.log('Tentando deletar despesa com ID:', id);
+      console.log('URL da API:', `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/expenses/${id}/delete/`);
+      
       await expenseService.deleteExpense(id);
+      console.log('Despesa deletada com sucesso');
+      
       setExpenses(expenses.filter(exp => exp.id !== id));
     } catch (err) {
-      console.error('Erro ao deletar despesa:', err);
+      console.error('Erro detalhado ao deletar despesa:', err);
+      console.error('Response data:', err.response?.data);
+      console.error('Response status:', err.response?.status);
       alert('Erro ao deletar despesa');
     }
+  };
+
+  const handleEditExpense = (expense: Expense) => {
+    setEditingExpense(expense);
+    setModalOpen(true);
+  };
+
+  const handleUpdateExpense = (updatedExpense: Expense) => {
+    setExpenses((prev) => 
+      prev.map((expense) => 
+        expense.id === updatedExpense.id ? updatedExpense : expense
+      )
+    );
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setEditingExpense(null);
   };
 
   const formatCurrency = (value: number) => {
@@ -191,6 +219,154 @@ export default function ExpensesPage() {
     }
   };
 
+  // Novo componente Modal para CRUD de categorias de despesas
+  function ExpenseCategoryModal({ isOpen, onClose }) {
+    const [categories, setCategories] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [newCategory, setNewCategory] = useState('');
+    const [editingCategory, setEditingCategory] = useState<any | null>(null);
+    const [editName, setEditName] = useState('');
+    const [actionMessage, setActionMessage] = useState('');
+
+    useEffect(() => {
+      if (isOpen) loadCategories();
+    }, [isOpen]);
+
+    const loadCategories = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await expenseService.getCategories();
+        setCategories(data);
+      } catch (err) {
+        setError('Erro ao carregar categorias');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleCreate = async () => {
+      if (!newCategory.trim()) return;
+      setLoading(true);
+      setError(null);
+      try {
+        await expenseService.createCategory({ name: newCategory });
+        setNewCategory('');
+        setActionMessage('Categoria criada com sucesso!');
+        loadCategories();
+      } catch (err) {
+        setError('Erro ao criar categoria');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleEdit = (cat: any) => {
+      setEditingCategory(cat);
+      setEditName(cat.name);
+    };
+
+    const handleUpdate = async () => {
+      if (!editingCategory || !editName.trim()) return;
+      setLoading(true);
+      setError(null);
+      try {
+        await expenseService.updateCategory(editingCategory.id, { name: editName });
+        setEditingCategory(null);
+        setEditName('');
+        setActionMessage('Categoria atualizada!');
+        loadCategories();
+      } catch (err) {
+        setError('Erro ao atualizar categoria');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleDelete = async (cat: any) => {
+      if (!confirm('Deseja realmente excluir esta categoria?')) return;
+      setLoading(true);
+      setError(null);
+      try {
+        // Tenta deletar normalmente
+        await expenseService.deleteCategory(cat.id);
+        setActionMessage('Categoria excluída!');
+        loadCategories();
+      } catch (err: any) {
+        // Se houver despesas, sugere migração ou exclusão em massa
+        if (err.response?.status === 409 && err.response?.data?.requires_action) {
+          if (confirm('Esta categoria possui despesas. Deseja migrar para outra categoria antes de excluir?')) {
+            // Migração
+            const targetId = prompt('ID da categoria de destino:');
+            if (targetId) {
+              await expenseService.migrateCategory(cat.id, targetId);
+              setActionMessage('Despesas migradas e categoria excluída!');
+              loadCategories();
+            }
+          } else if (confirm('Deseja excluir todas as despesas desta categoria?')) {
+            await expenseService.deleteCategoryWithExpenses(cat.id);
+            setActionMessage('Categoria e despesas excluídas!');
+            loadCategories();
+          }
+        } else {
+          setError('Erro ao excluir categoria');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 ${isOpen ? '' : 'hidden'}`}>
+        <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative">
+          <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600" onClick={onClose}>&times;</button>
+          <h2 className="text-xl font-bold mb-4">Gerenciar Categorias de Despesas</h2>
+          {error && <div className="bg-red-100 text-red-700 p-2 rounded mb-2">{error}</div>}
+          {actionMessage && <div className="bg-green-100 text-green-700 p-2 rounded mb-2">{actionMessage}</div>}
+          <div className="mb-4 flex gap-2">
+            <input
+              type="text"
+              className="border rounded px-2 py-1 flex-1"
+              placeholder="Nova categoria"
+              value={newCategory}
+              onChange={e => setNewCategory(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+            />
+            <button className="bg-blue-600 text-white px-4 py-1 rounded" onClick={handleCreate} disabled={loading}>Adicionar</button>
+          </div>
+          <ul className="divide-y divide-gray-200 max-h-64 overflow-y-auto">
+            {categories.map(cat => (
+              <li key={cat.id} className="flex items-center justify-between py-2">
+                {editingCategory?.id === cat.id ? (
+                  <>
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 flex-1"
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleUpdate()}
+                    />
+                    <button className="ml-2 text-green-600" onClick={handleUpdate} disabled={loading}>Salvar</button>
+                    <button className="ml-2 text-gray-500" onClick={() => setEditingCategory(null)}>Cancelar</button>
+                  </>
+                ) : (
+                  <>
+                    <span>{cat.name}</span>
+                    <div>
+                      <button className="ml-2 text-blue-600" onClick={() => handleEdit(cat)}>Editar</button>
+                      <button className="ml-2 text-red-600" onClick={() => handleDelete(cat)} disabled={loading}>Excluir</button>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -223,12 +399,15 @@ export default function ExpensesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ExpenseCategoryModal isOpen={categoryModalOpen} onClose={() => setCategoryModalOpen(false)} />
       <ExpenseModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={handleCloseModal}
         onCreated={(expense) => {
           setExpenses((prev) => [expense, ...prev]);
         }}
+        onUpdated={handleUpdateExpense}
+        editingExpense={editingExpense}
       />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -237,12 +416,20 @@ export default function ExpensesPage() {
             <h1 className="text-3xl font-bold text-gray-900">Despesas</h1>
             <p className="text-gray-600 mt-2">Gerencie suas despesas e controle seus gastos</p>
           </div>
-          <button
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
-            onClick={() => setModalOpen(true)}
-          >
-            + Nova Despesa
-          </button>
+          <div className="flex gap-2">
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
+              onClick={() => setModalOpen(true)}
+            >
+              + Nova Despesa
+            </button>
+            <button
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg"
+              onClick={() => setCategoryModalOpen(true)}
+            >
+              Categorias
+            </button>
+          </div>
         </div>
 
         {/* Abas */}
@@ -380,7 +567,10 @@ export default function ExpensesPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button className="text-blue-600 hover:text-blue-900 mr-3">
+                            <button 
+                              onClick={() => handleEditExpense(expense)}
+                              className="text-blue-600 hover:text-blue-900 mr-3"
+                            >
                               Editar
                             </button>
                             <button 

@@ -63,6 +63,8 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Next.js frontend
     "http://127.0.0.1:3000",
+    "http://localhost:3001",  # Adicionado para dev em porta alternativa
+    "http://127.0.0.1:3001",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -111,22 +113,23 @@ WSGI_APPLICATION = 'finance_app.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Configuração para desenvolvimento local com SQLite
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'financeiro_db'),
-        'USER': os.environ.get('POSTGRES_USER', 'financeiro_user'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'financeiro_pass'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'db'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
-# Caso queira usar SQLite para testes locais, descomente abaixo:
+# Configuração PostgreSQL para Docker (comentada para desenvolvimento local)
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.environ.get('POSTGRES_DB', 'financeiro_db'),
+#         'USER': os.environ.get('POSTGRES_USER', 'financeiro_user'),
+#         'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'financeiro_pass'),
+#         'HOST': os.environ.get('POSTGRES_HOST', 'db'),
+#         'PORT': os.environ.get('POSTGRES_PORT', '5432'),
 #     }
 # }
 

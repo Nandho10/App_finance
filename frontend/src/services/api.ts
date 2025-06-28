@@ -78,7 +78,6 @@ export const expenseService = {
         if (value) params.append(key, value);
       });
     }
-    
     const response = await api.get(`/api/expenses/?${params.toString()}`);
     return response.data;
   },
@@ -106,10 +105,64 @@ export const expenseService = {
     await api.delete(`/api/expenses/${id}/delete/`);
   },
 
-  // Buscar categorias de despesas
-  getCategories: async (): Promise<string[]> => {
-    const response = await api.get('/api/expenses/categories/');
+  // Buscar categorias de despesas (novo endpoint)
+  getCategories: async (): Promise<any[]> => {
+    const response = await api.get('/api/expense-categories/');
     return response.data;
+  },
+
+  // KPIs de despesas
+  getKPIs: async () => {
+    const response = await api.get('/api/expense-kpis/');
+    return response.data;
+  },
+
+  // Despesas por categoria
+  getByCategory: async (params?: { month?: string; year?: string }) => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    const response = await api.get(`/api/expense-by-category/${query}`);
+    return response.data;
+  },
+
+  // Evolução mensal das despesas
+  getEvolution: async (months?: number) => {
+    const query = months ? `?months=${months}` : '';
+    const response = await api.get(`/api/expense-evolution/${query}`);
+    return response.data;
+  },
+
+  // Top categorias de despesas
+  getTopCategories: async (params?: { limit?: number; months?: number }) => {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    const response = await api.get(`/api/top-expense-categories/${query}`);
+    return response.data;
+  },
+
+  // Criar categoria de despesa
+  createCategory: async (data: { name: string }) => {
+    const response = await api.post('/api/expense-categories/create/', data);
+    return response.data;
+  },
+
+  // Atualizar categoria de despesa
+  updateCategory: async (id: number, data: { name: string }) => {
+    const response = await api.put(`/api/expense-categories/${id}/update/`, data);
+    return response.data;
+  },
+
+  // Deletar categoria de despesa
+  deleteCategory: async (id: number) => {
+    return api.delete(`/api/expense-categories/${id}/delete/`);
+  },
+
+  // Migrar despesas para outra categoria
+  migrateCategory: async (id: number, target_category_id: number | string) => {
+    return api.post(`/api/expense-categories/${id}/migrate/`, { target_category_id });
+  },
+
+  // Deletar categoria e todas as despesas
+  deleteCategoryWithExpenses: async (id: number) => {
+    return api.delete(`/api/expense-categories/${id}/delete-with-expenses/`);
   },
 };
 

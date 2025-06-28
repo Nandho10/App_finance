@@ -21,6 +21,7 @@ export interface UpdateIncomeData {
   description?: string;
   amount?: number;
   category?: string;
+  category_id?: string | number;
   date?: string;
   source?: string;
   status?: 'received' | 'pending' | 'overdue';

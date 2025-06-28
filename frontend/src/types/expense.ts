@@ -3,6 +3,7 @@ export interface Expense {
   description: string;
   amount: number;
   category: string;
+  category_id?: number;
   date: string;
   paid_at?: string;
   payment_method: string;

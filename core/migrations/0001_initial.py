@@ -152,17 +152,4 @@ class Migration(migrations.Migration):
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
         ),
-        migrations.CreateModel(
-            name='Sale',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('product_or_service', models.CharField(max_length=255)),
-                ('client', models.CharField(blank=True, max_length=255, null=True)),
-                ('amount', models.DecimalField(decimal_places=2, max_digits=12)),
-                ('received_at', models.DateField()),
-                ('payment_method', models.CharField(choices=[('cash', 'Dinheiro'), ('pix', 'PIX'), ('transfer', 'Transferência')], max_length=50)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
-            ],
-        ),
     ]

@@ -3,11 +3,14 @@
 import { useState, useEffect } from 'react';
 import { Income } from '@/types/income';
 import { incomeService } from '@/services/api';
+import IncomeModal from '@/components/IncomeModal';
 
 export default function IncomesPage() {
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
 
   useEffect(() => {
     loadIncomes();
@@ -16,27 +19,43 @@ export default function IncomesPage() {
   const loadIncomes = async () => {
     try {
       setLoading(true);
-      setError(null);
       const data = await incomeService.getIncomes();
       setIncomes(data);
+      setError(null);
     } catch (err) {
-      console.error('Erro ao carregar receitas:', err);
-      setError('Erro ao carregar receitas. Verifique se o backend está rodando.');
+      setError('Erro ao carregar receitas');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteIncome = async (id: number) => {
-    if (!confirm('Tem certeza que deseja deletar esta receita?')) return;
-    
+    if (confirm('Tem certeza que deseja deletar esta receita?')) {
     try {
       await incomeService.deleteIncome(id);
-      setIncomes(incomes.filter(inc => inc.id !== id));
+        setIncomes((prev) => prev.filter((income) => income.id !== id));
     } catch (err) {
-      console.error('Erro ao deletar receita:', err);
       alert('Erro ao deletar receita');
     }
+    }
+  };
+
+  const handleEditIncome = (income: Income) => {
+    setEditingIncome(income);
+    setModalOpen(true);
+  };
+
+  const handleUpdateIncome = (updatedIncome: Income) => {
+    setIncomes((prev) => 
+      prev.map((income) => 
+        income.id === updatedIncome.id ? updatedIncome : income
+      )
+    );
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setEditingIncome(null);
   };
 
   const formatCurrency = (value: number) => {
@@ -108,6 +127,15 @@ export default function IncomesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <IncomeModal
+        isOpen={modalOpen}
+        onClose={handleCloseModal}
+        onCreated={(income) => {
+          setIncomes((prev) => [income, ...prev]);
+        }}
+        onUpdated={handleUpdateIncome}
+        editingIncome={editingIncome}
+      />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -115,7 +143,10 @@ export default function IncomesPage() {
             <h1 className="text-3xl font-bold text-gray-900">Receitas</h1>
             <p className="text-gray-600 mt-2">Gerencie suas receitas e controle seus ganhos</p>
           </div>
-          <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">
+          <button
+            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg"
+            onClick={() => setModalOpen(true)}
+          >
             + Nova Receita
           </button>
         </div>
@@ -212,7 +243,10 @@ export default function IncomesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button className="text-blue-600 hover:text-blue-900 mr-3">
+                        <button 
+                          onClick={() => handleEditIncome(income)}
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                        >
                           Editar
                         </button>
                         <button 

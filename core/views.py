@@ -5,9 +5,17 @@ from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum, Q
 from django.utils import timezone
+from django.core.serializers import serialize
+from django.forms.models import model_to_dict
 import json
 from datetime import datetime, timedelta
 from decimal import Decimal
+from django.db import transaction
+
+# Importar modelos
+from .models.category_models import Category
+from .models.transaction_models import Income, Expense
+from .models.user_models import User
 
 # Simulação de dados para o MVP (será substituído por dados reais do banco)
 def get_mock_dashboard_data():
@@ -497,42 +505,67 @@ def expense_detail(request, expense_id):
 @csrf_exempt
 @require_http_methods(["PUT"])
 def expense_update(request, expense_id):
-    """Atualizar despesa"""
+    """Atualizar despesa no banco de dados"""
     try:
         data = json.loads(request.body)
-        expense = next((exp for exp in mock_expenses if exp['id'] == int(expense_id)), None)
+        from core.models.transaction_models import Expense
+        expense = Expense.objects.filter(id=expense_id).first()
         
         if not expense:
             return JsonResponse({'error': 'Despesa não encontrada'}, status=404)
         
         # Atualizar campos
-        expense.update({
-            'description': data.get('description', expense['description']),
-            'amount': float(data.get('amount', expense['amount'])),
-            'category': data.get('category', expense['category']),
-            'date': data.get('date', expense['date']),
-            'payment_method': data.get('payment_method', expense['payment_method']),
-            'status': data.get('status', expense['status'])
-        })
+        if 'description' in data:
+            expense.description = data['description']
         
-        return JsonResponse(expense)
+        if 'amount' in data:
+            expense.amount = Decimal(str(data['amount']))
+        
+        if 'category' in data:
+            if data['category']:
+                category = Category.objects.filter(name=data['category'], type='expense').first()
+                if not category:
+                    return JsonResponse({'error': 'Categoria não encontrada'}, status=400)
+                expense.category = category
+            else:
+                expense.category = None
+        
+        if 'paid_at' in data:
+            expense.paid_at = datetime.strptime(data['paid_at'], '%Y-%m-%d').date()
+        
+        if 'payment_method' in data:
+            expense.payment_method = data['payment_method']
+        
+        expense.save()
+        
+        return JsonResponse({
+            'id': expense.id,
+            'description': expense.description,
+            'amount': float(expense.amount),
+            'category': expense.category.name if expense.category else 'Sem categoria',
+            'date': expense.paid_at.strftime('%Y-%m-%d'),
+            'paid_at': expense.paid_at.strftime('%Y-%m-%d'),
+            'payment_method': expense.payment_method,
+            'status': 'paid',
+            'created_at': expense.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
     except json.JSONDecodeError:
         return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except ValueError as e:
+        return JsonResponse({'error': f'Valor inválido: {str(e)}'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def expense_delete(request, expense_id):
-    """Deletar despesa"""
+    """Deletar despesa (do banco de dados)"""
     try:
-        global mock_expenses
-        expense = next((exp for exp in mock_expenses if exp['id'] == int(expense_id)), None)
-        
+        from core.models.transaction_models import Expense
+        expense = Expense.objects.filter(id=expense_id).first()
         if not expense:
             return JsonResponse({'error': 'Despesa não encontrada'}, status=404)
-        
-        mock_expenses = [exp for exp in mock_expenses if exp['id'] != int(expense_id)]
+        expense.delete()
         return JsonResponse({'message': 'Despesa deletada com sucesso'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -557,102 +590,175 @@ def expense_categories(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+@csrf_exempt
+@require_http_methods(["GET"])
+def expense_categories_list(request):
+    """Listar categorias de despesas do banco de dados"""
+    try:
+        categories = Category.objects.filter(type='expense').values('id', 'name', 'type')
+        return JsonResponse(list(categories), safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 # Endpoints para Receitas
 @csrf_exempt
 @require_http_methods(["GET"])
 def incomes_list(request):
-    """Listar todas as receitas"""
+    """Listar todas as receitas do banco de dados"""
     try:
-        # TODO: Implementar filtros por data, categoria, etc.
-        return JsonResponse(mock_incomes, safe=False)
+        # Buscar receitas do banco de dados
+        incomes = Income.objects.select_related('category').all()
+        
+        # Converter para formato JSON
+        incomes_data = []
+        for income in incomes:
+            incomes_data.append({
+                'id': income.id,
+                'description': income.description,
+                'amount': float(income.amount),
+                'category': income.category.name if income.category else 'Sem categoria',
+                'category_id': income.category.id if income.category else None,
+                'date': income.received_at.strftime('%Y-%m-%d'),
+                'source': income.description,  # Usar description como source
+                'status': 'received',  # Assumir que todas estão recebidas
+                'created_at': income.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        return JsonResponse(incomes_data, safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def income_create(request):
-    """Criar nova receita"""
+    """Criar nova receita no banco de dados"""
     try:
-        global income_id_counter
         data = json.loads(request.body)
         
         # Validação básica
-        required_fields = ['description', 'amount', 'category', 'date']
+        required_fields = ['description', 'amount', 'date']
         for field in required_fields:
             if field not in data:
                 return JsonResponse({'error': f'Campo obrigatório: {field}'}, status=400)
         
+        # Buscar categoria se fornecida
+        category = None
+        if 'category_id' in data and data['category_id']:
+            category = Category.objects.filter(id=data['category_id'], type='income').first()
+            if not category:
+                return JsonResponse({'error': 'Categoria não encontrada'}, status=400)
+        
         # Criar nova receita
-        new_income = {
-            'id': income_id_counter,
-            'description': data['description'],
-            'amount': float(data['amount']),
-            'category': data['category'],
-            'date': data['date'],
-            'source': data.get('source', ''),
-            'status': data.get('status', 'received')
-        }
+        income = Income.objects.create(
+            description=data['description'],
+            amount=Decimal(str(data['amount'])),
+            category=category,
+            received_at=datetime.strptime(data['date'], '%Y-%m-%d').date(),
+            user_id=1  # TODO: Usar usuário autenticado
+        )
         
-        mock_incomes.append(new_income)
-        income_id_counter += 1
-        
-        return JsonResponse(new_income, status=201)
+        return JsonResponse({
+            'id': income.id,
+            'description': income.description,
+            'amount': float(income.amount),
+            'category': income.category.name if income.category else 'Sem categoria',
+            'category_id': income.category.id if income.category else None,
+            'date': income.received_at.strftime('%Y-%m-%d'),
+            'source': income.description,
+            'status': 'received',
+            'created_at': income.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        }, status=201)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except ValueError as e:
+        return JsonResponse({'error': f'Valor inválido: {str(e)}'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def income_detail(request, income_id):
-    """Buscar receita específica"""
+    """Buscar receita específica do banco de dados"""
     try:
-        income = next((inc for inc in mock_incomes if inc['id'] == int(income_id)), None)
+        income = Income.objects.select_related('category').filter(id=income_id).first()
         if not income:
             return JsonResponse({'error': 'Receita não encontrada'}, status=404)
-        return JsonResponse(income)
+        
+        return JsonResponse({
+            'id': income.id,
+            'description': income.description,
+            'amount': float(income.amount),
+            'category': income.category.name if income.category else 'Sem categoria',
+            'category_id': income.category.id if income.category else None,
+            'date': income.received_at.strftime('%Y-%m-%d'),
+            'source': income.description,
+            'status': 'received',
+            'created_at': income.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["PUT"])
 def income_update(request, income_id):
-    """Atualizar receita"""
+    """Atualizar receita no banco de dados"""
     try:
         data = json.loads(request.body)
-        income = next((inc for inc in mock_incomes if inc['id'] == int(income_id)), None)
+        income = Income.objects.filter(id=income_id).first()
         
         if not income:
             return JsonResponse({'error': 'Receita não encontrada'}, status=404)
         
         # Atualizar campos
-        income.update({
-            'description': data.get('description', income['description']),
-            'amount': float(data.get('amount', income['amount'])),
-            'category': data.get('category', income['category']),
-            'date': data.get('date', income['date']),
-            'source': data.get('source', income['source']),
-            'status': data.get('status', income['status'])
-        })
+        if 'description' in data:
+            income.description = data['description']
         
-        return JsonResponse(income)
+        if 'amount' in data:
+            income.amount = Decimal(str(data['amount']))
+        
+        if 'date' in data:
+            income.received_at = datetime.strptime(data['date'], '%Y-%m-%d').date()
+        
+        if 'category_id' in data:
+            if data['category_id']:
+                category = Category.objects.filter(id=data['category_id'], type='income').first()
+                if not category:
+                    return JsonResponse({'error': 'Categoria não encontrada'}, status=400)
+                income.category = category
+            else:
+                income.category = None
+        
+        income.save()
+        
+        return JsonResponse({
+            'id': income.id,
+            'description': income.description,
+            'amount': float(income.amount),
+            'category': income.category.name if income.category else 'Sem categoria',
+            'category_id': income.category.id if income.category else None,
+            'date': income.received_at.strftime('%Y-%m-%d'),
+            'source': income.description,
+            'status': 'received',
+            'created_at': income.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
     except json.JSONDecodeError:
         return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except ValueError as e:
+        return JsonResponse({'error': f'Valor inválido: {str(e)}'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def income_delete(request, income_id):
-    """Deletar receita"""
+    """Deletar receita do banco de dados"""
     try:
-        global mock_incomes
-        income = next((inc for inc in mock_incomes if inc['id'] == int(income_id)), None)
+        income = Income.objects.filter(id=income_id).first()
         
         if not income:
             return JsonResponse({'error': 'Receita não encontrada'}, status=404)
         
-        mock_incomes = [inc for inc in mock_incomes if inc['id'] != int(income_id)]
+        income.delete()
         return JsonResponse({'message': 'Receita deletada com sucesso'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -660,19 +766,11 @@ def income_delete(request, income_id):
 @csrf_exempt
 @require_http_methods(["GET"])
 def income_categories(request):
-    """Listar categorias de receitas"""
+    """Listar categorias de receitas do banco de dados"""
     try:
-        categories = [
-            'Salário',
-            'Freelance',
-            'Investimentos',
-            'Bônus',
-            'Comissões',
-            'Aluguel',
-            'Vendas',
-            'Outros'
-        ]
-        return JsonResponse(categories, safe=False)
+        # Buscar categorias de receitas do banco de dados
+        categories = Category.objects.filter(type='income').values('id', 'name', 'type')
+        return JsonResponse(list(categories), safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -853,5 +951,945 @@ def budget_analysis(request):
                 })
         
         return JsonResponse(analysis, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+# Endpoints CRUD para Categorias de Receitas
+@csrf_exempt
+@require_http_methods(["POST"])
+def income_category_create(request):
+    """Criar nova categoria de receita"""
+    try:
+        data = json.loads(request.body)
+        
+        # Validação básica
+        required_fields = ['name']
+        for field in required_fields:
+            if field not in data:
+                return JsonResponse({'error': f'Campo obrigatório: {field}'}, status=400)
+        
+        # Verificar se já existe categoria com este nome
+        existing_category = Category.objects.filter(
+            name=data['name'], 
+            type='income'
+        ).first()
+        
+        if existing_category:
+            return JsonResponse({'error': 'Já existe uma categoria com este nome'}, status=400)
+        
+        # Criar nova categoria
+        category = Category.objects.create(
+            name=data['name'],
+            type='income',
+            user_id=1  # TODO: Usar usuário autenticado
+        )
+        
+        return JsonResponse({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        }, status=201)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def income_category_detail(request, category_id):
+    """Buscar categoria específica"""
+    try:
+        category = Category.objects.filter(id=category_id, type='income').first()
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        
+        return JsonResponse({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def income_category_update(request, category_id):
+    """Atualizar categoria de receita"""
+    try:
+        data = json.loads(request.body)
+        category = Category.objects.filter(id=category_id, type='income').first()
+        
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        
+        # Verificar se o novo nome já existe em outra categoria
+        if 'name' in data:
+            existing_category = Category.objects.filter(
+                name=data['name'], 
+                type='income'
+            ).exclude(id=category_id).first()
+            
+            if existing_category:
+                return JsonResponse({'error': 'Já existe uma categoria com este nome'}, status=400)
+            
+            category.name = data['name']
+            category.save()
+        
+        return JsonResponse({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def income_category_delete(request, category_id):
+    """Deletar categoria de receita com lógica de migração"""
+    try:
+        category = Category.objects.filter(id=category_id, type='income').first()
+        
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        
+        # Verificar se existem receitas nesta categoria
+        incomes_count = Income.objects.filter(category=category).count()
+        
+        if incomes_count > 0:
+            # Se há receitas, retornar informações para o frontend decidir
+            return JsonResponse({
+                'message': f'Esta categoria possui {incomes_count} receita(s)',
+                'incomes_count': incomes_count,
+                'category_id': category_id,
+                'category_name': category.name,
+                'requires_action': True
+            }, status=409)
+        
+        # Se não há receitas, deletar diretamente
+        category.delete()
+        return JsonResponse({'message': 'Categoria deletada com sucesso'})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def income_category_migrate(request, category_id):
+    """Migrar receitas de uma categoria para outra antes de deletar"""
+    try:
+        data = json.loads(request.body)
+        
+        if 'target_category_id' not in data:
+            return JsonResponse({'error': 'ID da categoria de destino é obrigatório'}, status=400)
+        
+        source_category = Category.objects.filter(id=category_id, type='income').first()
+        target_category = Category.objects.filter(id=data['target_category_id'], type='income').first()
+        
+        if not source_category:
+            return JsonResponse({'error': 'Categoria de origem não encontrada'}, status=404)
+        
+        if not target_category:
+            return JsonResponse({'error': 'Categoria de destino não encontrada'}, status=404)
+        
+        # Migrar todas as receitas
+        migrated_count = Income.objects.filter(category=source_category).update(category=target_category)
+        
+        # Deletar categoria de origem
+        source_category.delete()
+        
+        return JsonResponse({
+            'message': f'{migrated_count} receita(s) migrada(s) com sucesso',
+            'migrated_count': migrated_count
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def income_category_delete_with_incomes(request, category_id):
+    """Deletar categoria e todas as suas receitas"""
+    try:
+        category = Category.objects.filter(id=category_id, type='income').first()
+        
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        
+        # Deletar todas as receitas da categoria
+        deleted_incomes = Income.objects.filter(category=category).delete()
+        
+        # Deletar a categoria
+        category.delete()
+        
+        return JsonResponse({
+            'message': f'Categoria e {deleted_incomes[0]} receita(s) deletada(s) com sucesso',
+            'deleted_incomes_count': deleted_incomes[0]
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def import_income_excel_api(request):
+    """Importar receitas e categorias via Excel via API"""
+    try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'Arquivo não fornecido'}, status=400)
+        
+        uploaded_file = request.FILES['file']
+        
+        # Verificar extensão do arquivo
+        if not uploaded_file.name.endswith(('.xlsx', '.xls')):
+            return JsonResponse({'error': 'Arquivo deve ser Excel (.xlsx ou .xls)'}, status=400)
+        
+        # Salvar arquivo temporariamente
+        import tempfile
+        import os
+        import pandas as pd
+        from django.core.files.storage import default_storage
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            for chunk in uploaded_file.chunks():
+                tmp_file.write(chunk)
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # Ler arquivo Excel
+            df = pd.read_excel(tmp_file_path)
+            
+            # Mapeamento padrão de colunas
+            column_mapping = {
+                'description': ['descrição', 'description', 'desc', 'nome'],
+                'amount': ['valor', 'amount', 'montante', 'preço'],
+                'category': ['categoria', 'category', 'cat'],
+                'date': ['data', 'date', 'data_recebimento', 'received_at'],
+                'source': ['fonte', 'source', 'origem']
+            }
+            
+            # Encontrar colunas correspondentes
+            found_columns = {}
+            for field, possible_names in column_mapping.items():
+                for col in df.columns:
+                    if col.lower() in [name.lower() for name in possible_names]:
+                        found_columns[field] = col
+                        break
+            
+            # Validar colunas obrigatórias
+            required_fields = ['description', 'amount', 'date']
+            missing_fields = [field for field in required_fields if field not in found_columns]
+            
+            if missing_fields:
+                return JsonResponse({
+                    'error': f'Colunas obrigatórias não encontradas: {missing_fields}',
+                    'available_columns': list(df.columns)
+                }, status=400)
+            
+            # Processar dados
+            categories_created = 0
+            incomes_created = 0
+            errors = []
+            
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    try:
+                        # Extrair dados
+                        description = str(row[found_columns['description']]).strip()
+                        amount = float(row[found_columns['amount']])
+                        
+                        # Processar data
+                        if pd.isna(row[found_columns['date']]):
+                            errors.append(f'Linha {index + 2}: Data inválida')
+                            continue
+                        
+                        try:
+                            if isinstance(row[found_columns['date']], str):
+                                date = datetime.strptime(str(row[found_columns['date']]), '%Y-%m-%d').date()
+                            else:
+                                date = row[found_columns['date']].date()
+                        except:
+                            errors.append(f'Linha {index + 2}: Formato de data inválido')
+                            continue
+                        
+                        # Processar categoria
+                        category = None
+                        if 'category' in found_columns:
+                            category_name = str(row[found_columns['category']]).strip()
+                            if category_name and category_name.lower() != 'nan':
+                                category, created = Category.objects.get_or_create(
+                                    name=category_name,
+                                    type='income',
+                                    user_id=1  # TODO: Usar usuário autenticado
+                                )
+                                if created:
+                                    categories_created += 1
+                        
+                        # Criar receita
+                        income = Income.objects.create(
+                            description=description,
+                            amount=Decimal(str(amount)),
+                            category=category,
+                            received_at=date,
+                            user_id=1  # TODO: Usar usuário autenticado
+                        )
+                        incomes_created += 1
+                            
+                    except Exception as e:
+                        errors.append(f'Linha {index + 2}: {str(e)}')
+                        continue
+            
+            # Limpar arquivo temporário
+            os.unlink(tmp_file_path)
+            
+            return JsonResponse({
+                'message': 'Importação concluída com sucesso',
+                'categories_created': categories_created,
+                'incomes_created': incomes_created,
+                'errors': errors,
+                'total_processed': len(df)
+            })
+            
+        except Exception as e:
+            # Limpar arquivo temporário em caso de erro
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+            raise e
+            
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+# Endpoints para KPIs e Relatórios de Receitas
+@csrf_exempt
+@require_http_methods(["GET"])
+def income_kpis(request):
+    """KPIs de receitas"""
+    try:
+        from django.db.models import Sum, Avg, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        
+        # Período atual (mês atual)
+        now = timezone.now()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        current_month_end = (current_month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        
+        # Mês anterior
+        last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+        last_month_end = current_month_start - timedelta(days=1)
+        
+        # Receita total do mês atual
+        current_month_income = Income.objects.filter(
+            received_at__gte=current_month_start,
+            received_at__lte=current_month_end
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        # Receita total do mês anterior
+        last_month_income = Income.objects.filter(
+            received_at__gte=last_month_start,
+            received_at__lte=last_month_end
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        # Receita média por mês (últimos 6 meses)
+        six_months_ago = current_month_start - timedelta(days=180)
+        avg_monthly_income = Income.objects.filter(
+            received_at__gte=six_months_ago
+        ).aggregate(avg=Avg('amount'))['avg'] or Decimal('0.00')
+        
+        # Crescimento percentual
+        growth_percentage = 0
+        if last_month_income > 0:
+            growth_percentage = ((current_month_income - last_month_income) / last_month_income) * 100
+        
+        # Total de receitas do mês
+        income_count = Income.objects.filter(
+            received_at__gte=current_month_start,
+            received_at__lte=current_month_end
+        ).count()
+        
+        return JsonResponse({
+            'current_month_total': float(current_month_income),
+            'last_month_total': float(last_month_income),
+            'avg_monthly_income': float(avg_monthly_income),
+            'growth_percentage': round(growth_percentage, 2),
+            'income_count': income_count,
+            'period': {
+                'current_month': current_month_start.strftime('%Y-%m'),
+                'last_month': last_month_start.strftime('%Y-%m')
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def income_by_category(request):
+    """Receita por categoria"""
+    try:
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        
+        # Parâmetros de filtro
+        month = request.GET.get('month')
+        year = request.GET.get('year')
+        
+        if month and year:
+            start_date = datetime(int(year), int(month), 1).date()
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        else:
+            # Mês atual
+            now = timezone.now()
+            start_date = now.replace(day=1).date()
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        
+        # Buscar receitas por categoria
+        category_incomes = Income.objects.filter(
+            received_at__gte=start_date,
+            received_at__lte=end_date
+        ).values('category__name').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total')
+        
+        # Formatar dados
+        result = []
+        for item in category_incomes:
+            result.append({
+                'category': item['category__name'] or 'Sem categoria',
+                'total': float(item['total']),
+                'count': item['count']
+            })
+        
+        return JsonResponse({
+            'data': result,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d')
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def income_evolution(request):
+    """Evolução mensal da receita"""
+    try:
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        
+        # Parâmetros
+        months = int(request.GET.get('months', 6))
+        
+        # Calcular datas
+        now = timezone.now()
+        end_date = now.replace(day=1) - timedelta(days=1)
+        start_date = (end_date - timedelta(days=months * 30)).replace(day=1)
+        
+        # Buscar dados mensais
+        monthly_data = []
+        current_date = start_date
+        
+        while current_date <= end_date:
+            month_start = current_date.replace(day=1)
+            month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            
+            total = Income.objects.filter(
+                received_at__gte=month_start,
+                received_at__lte=month_end
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            
+            monthly_data.append({
+                'month': current_date.strftime('%Y-%m'),
+                'total': float(total),
+                'count': Income.objects.filter(
+                    received_at__gte=month_start,
+                    received_at__lte=month_end
+                ).count()
+            })
+            
+            current_date = (month_start + timedelta(days=32)).replace(day=1)
+        
+        return JsonResponse({
+            'data': monthly_data,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m'),
+                'end_date': end_date.strftime('%Y-%m'),
+                'months': months
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def top_income_sources(request):
+    """Top fontes de receita"""
+    try:
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        
+        # Parâmetros
+        limit = int(request.GET.get('limit', 10))
+        months = int(request.GET.get('months', 3))
+        
+        # Calcular período
+        now = timezone.now()
+        start_date = (now - timedelta(days=months * 30)).date()
+        
+        # Buscar top fontes por categoria
+        top_sources = Income.objects.filter(
+            received_at__gte=start_date
+        ).values('category__name').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total')[:limit]
+        
+        # Formatar dados
+        result = []
+        for item in top_sources:
+            result.append({
+                'category': item['category__name'] or 'Sem categoria',
+                'total': float(item['total']),
+                'count': item['count'],
+                'percentage': 0  # Será calculado abaixo
+            })
+        
+        # Calcular percentuais
+        total_amount = sum(item['total'] for item in result)
+        if total_amount > 0:
+            for item in result:
+                item['percentage'] = round((item['total'] / total_amount) * 100, 2)
+        
+        return JsonResponse({
+            'data': result,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': now.date().strftime('%Y-%m-%d'),
+                'months': months
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def expense_category_create(request):
+    """Criar nova categoria de despesa"""
+    try:
+        data = json.loads(request.body)
+        required_fields = ['name']
+        for field in required_fields:
+            if field not in data:
+                return JsonResponse({'error': f'Campo obrigatório: {field}'}, status=400)
+        existing_category = Category.objects.filter(
+            name=data['name'], 
+            type='expense'
+        ).first()
+        if existing_category:
+            return JsonResponse({'error': 'Já existe uma categoria com este nome'}, status=400)
+        category = Category.objects.create(
+            name=data['name'],
+            type='expense',
+            user_id=1  # TODO: Usar usuário autenticado
+        )
+        return JsonResponse({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        }, status=201)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def expense_category_detail(request, category_id):
+    """Buscar categoria de despesa específica"""
+    try:
+        category = Category.objects.filter(id=category_id, type='expense').first()
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        return JsonResponse({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def expense_category_update(request, category_id):
+    """Atualizar categoria de despesa"""
+    try:
+        data = json.loads(request.body)
+        category = Category.objects.filter(id=category_id, type='expense').first()
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        if 'name' in data:
+            existing_category = Category.objects.filter(
+                name=data['name'], 
+                type='expense'
+            ).exclude(id=category_id).first()
+            if existing_category:
+                return JsonResponse({'error': 'Já existe uma categoria com este nome'}, status=400)
+            category.name = data['name']
+            category.save()
+        return JsonResponse({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def expense_category_delete(request, category_id):
+    """Deletar categoria de despesa com lógica de migração"""
+    try:
+        category = Category.objects.filter(id=category_id, type='expense').first()
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        from core.models import Expense
+        expenses_count = Expense.objects.filter(category=category).count()
+        if expenses_count > 0:
+            return JsonResponse({
+                'message': f'Esta categoria possui {expenses_count} despesa(s)',
+                'expenses_count': expenses_count,
+                'category_id': category_id,
+                'category_name': category.name,
+                'requires_action': True
+            }, status=409)
+        category.delete()
+        return JsonResponse({'message': 'Categoria deletada com sucesso'})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def expense_category_migrate(request, category_id):
+    """Migrar despesas de uma categoria para outra antes de deletar"""
+    try:
+        data = json.loads(request.body)
+        if 'target_category_id' not in data:
+            return JsonResponse({'error': 'ID da categoria de destino é obrigatório'}, status=400)
+        source_category = Category.objects.filter(id=category_id, type='expense').first()
+        target_category = Category.objects.filter(id=data['target_category_id'], type='expense').first()
+        if not source_category:
+            return JsonResponse({'error': 'Categoria de origem não encontrada'}, status=404)
+        if not target_category:
+            return JsonResponse({'error': 'Categoria de destino não encontrada'}, status=404)
+        from core.models import Expense
+        migrated_count = Expense.objects.filter(category=source_category).update(category=target_category)
+        source_category.delete()
+        return JsonResponse({
+            'message': f'{migrated_count} despesa(s) migrada(s) com sucesso',
+            'migrated_count': migrated_count
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def expense_category_delete_with_expenses(request, category_id):
+    """Deletar categoria e todas as suas despesas"""
+    try:
+        category = Category.objects.filter(id=category_id, type='expense').first()
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=404)
+        from core.models import Expense
+        deleted_expenses = Expense.objects.filter(category=category).delete()
+        category.delete()
+        return JsonResponse({
+            'message': f'Categoria e {deleted_expenses[0]} despesa(s) deletada(s) com sucesso',
+            'deleted_expenses_count': deleted_expenses[0]
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def import_expense_excel_api(request):
+    """Importar despesas e categorias via Excel via API"""
+    try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'Arquivo não fornecido'}, status=400)
+        uploaded_file = request.FILES['file']
+        # Verificar extensão do arquivo
+        if not uploaded_file.name.endswith(('.xlsx', '.xls')):
+            return JsonResponse({'error': 'Arquivo deve ser Excel (.xlsx ou .xls)'}, status=400)
+        import tempfile
+        import os
+        import pandas as pd
+        from django.core.files.storage import default_storage
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            for chunk in uploaded_file.chunks():
+                tmp_file.write(chunk)
+            tmp_file_path = tmp_file.name
+        try:
+            df = pd.read_excel(tmp_file_path)
+            column_mapping = {
+                'description': ['descrição', 'description', 'desc', 'nome'],
+                'amount': ['valor', 'amount', 'montante', 'preço'],
+                'category': ['categoria', 'category', 'cat'],
+                'date': ['data', 'date', 'data_pagamento', 'paid_at'],
+                'payment_method': ['forma_pagamento', 'payment_method', 'metodo', 'método']
+            }
+            found_columns = {}
+            for field, possible_names in column_mapping.items():
+                for col in df.columns:
+                    if col.lower() in [name.lower() for name in possible_names]:
+                        found_columns[field] = col
+                        break
+            required_fields = ['description', 'amount', 'date']
+            missing_fields = [field for field in required_fields if field not in found_columns]
+            if missing_fields:
+                return JsonResponse({
+                    'error': f'Colunas obrigatórias não encontradas: {missing_fields}',
+                    'available_columns': list(df.columns)
+                }, status=400)
+            categories_created = 0
+            expenses_created = 0
+            errors = []
+            with transaction.atomic():
+                for index, row in df.iterrows():
+                    try:
+                        description = str(row[found_columns['description']]).strip()
+                        amount = float(row[found_columns['amount']])
+                        if pd.isna(row[found_columns['date']]):
+                            errors.append(f'Linha {index + 2}: Data inválida')
+                            continue
+                        try:
+                            if isinstance(row[found_columns['date']], str):
+                                date = datetime.strptime(str(row[found_columns['date']]), '%Y-%m-%d').date()
+                            else:
+                                date = row[found_columns['date']].date()
+                        except:
+                            errors.append(f'Linha {index + 2}: Formato de data inválido')
+                            continue
+                        category = None
+                        if 'category' in found_columns:
+                            category_name = str(row[found_columns['category']]).strip()
+                            if category_name and category_name.lower() != 'nan':
+                                category, created = Category.objects.get_or_create(
+                                    name=category_name,
+                                    type='expense',
+                                    user_id=1  # TODO: Usar usuário autenticado
+                                )
+                                if created:
+                                    categories_created += 1
+                        payment_method = None
+                        if 'payment_method' in found_columns:
+                            payment_method = str(row[found_columns['payment_method']]).strip()
+                            if payment_method.lower() == 'nan':
+                                payment_method = None
+                        expense = Expense.objects.create(
+                            description=description,
+                            amount=Decimal(str(amount)),
+                            category=category,
+                            paid_at=date,
+                            payment_method=payment_method,
+                            user_id=1  # TODO: Usar usuário autenticado
+                        )
+                        expenses_created += 1
+                    except Exception as e:
+                        errors.append(f'Linha {index + 2}: {str(e)}')
+                        continue
+            os.unlink(tmp_file_path)
+            return JsonResponse({
+                'message': 'Importação concluída com sucesso',
+                'categories_created': categories_created,
+                'expenses_created': expenses_created,
+                'errors': errors,
+                'total_processed': len(df)
+            })
+        except Exception as e:
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+            raise e
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def expense_kpis(request):
+    """KPIs de despesas"""
+    try:
+        from django.db.models import Sum, Avg, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        from core.models import Expense
+        now = timezone.now()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        current_month_end = (current_month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+        last_month_end = current_month_start - timedelta(days=1)
+        current_month_expense = Expense.objects.filter(
+            paid_at__gte=current_month_start,
+            paid_at__lte=current_month_end
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        last_month_expense = Expense.objects.filter(
+            paid_at__gte=last_month_start,
+            paid_at__lte=last_month_end
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        six_months_ago = current_month_start - timedelta(days=180)
+        avg_monthly_expense = Expense.objects.filter(
+            paid_at__gte=six_months_ago
+        ).aggregate(avg=Avg('amount'))['avg'] or 0
+        growth_percentage = 0
+        if last_month_expense > 0:
+            growth_percentage = ((current_month_expense - last_month_expense) / last_month_expense) * 100
+        expense_count = Expense.objects.filter(
+            paid_at__gte=current_month_start,
+            paid_at__lte=current_month_end
+        ).count()
+        return JsonResponse({
+            'current_month_total': float(current_month_expense),
+            'last_month_total': float(last_month_expense),
+            'avg_monthly_expense': float(avg_monthly_expense),
+            'growth_percentage': round(growth_percentage, 2),
+            'expense_count': expense_count,
+            'period': {
+                'current_month': current_month_start.strftime('%Y-%m'),
+                'last_month': last_month_start.strftime('%Y-%m')
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def expense_by_category(request):
+    """Despesas por categoria"""
+    try:
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        from core.models import Expense
+        month = request.GET.get('month')
+        year = request.GET.get('year')
+        if month and year:
+            start_date = datetime(int(year), int(month), 1).date()
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        else:
+            now = timezone.now()
+            start_date = now.replace(day=1).date()
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        category_expenses = Expense.objects.filter(
+            paid_at__gte=start_date,
+            paid_at__lte=end_date
+        ).values('category__name').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total')
+        result = []
+        for item in category_expenses:
+            result.append({
+                'category': item['category__name'] or 'Sem categoria',
+                'total': float(item['total']),
+                'count': item['count']
+            })
+        return JsonResponse({
+            'data': result,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date.strftime('%Y-%m-%d')
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def expense_evolution(request):
+    """Evolução mensal das despesas"""
+    try:
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        from core.models import Expense
+        months = int(request.GET.get('months', 6))
+        now = timezone.now()
+        end_date = now.replace(day=1) - timedelta(days=1)
+        start_date = (end_date - timedelta(days=months * 30)).replace(day=1)
+        monthly_data = []
+        current_date = start_date
+        while current_date <= end_date:
+            month_start = current_date.replace(day=1)
+            month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            total = Expense.objects.filter(
+                paid_at__gte=month_start,
+                paid_at__lte=month_end
+            ).aggregate(total=Sum('amount'))['total'] or 0
+            monthly_data.append({
+                'month': current_date.strftime('%Y-%m'),
+                'total': float(total),
+                'count': Expense.objects.filter(
+                    paid_at__gte=month_start,
+                    paid_at__lte=month_end
+                ).count()
+            })
+            current_date = (month_start + timedelta(days=32)).replace(day=1)
+        return JsonResponse({
+            'data': monthly_data,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m'),
+                'end_date': end_date.strftime('%Y-%m'),
+                'months': months
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def top_expense_categories(request):
+    """Top categorias de despesas"""
+    try:
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        from core.models import Expense
+        limit = int(request.GET.get('limit', 10))
+        months = int(request.GET.get('months', 3))
+        now = timezone.now()
+        start_date = (now - timedelta(days=months * 30)).date()
+        top_categories = Expense.objects.filter(
+            paid_at__gte=start_date
+        ).values('category__name').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total')[:limit]
+        result = []
+        for item in top_categories:
+            result.append({
+                'category': item['category__name'] or 'Sem categoria',
+                'total': float(item['total']),
+                'count': item['count'],
+                'percentage': 0
+            })
+        total_amount = sum(item['total'] for item in result)
+        if total_amount > 0:
+            for item in result:
+                item['percentage'] = round((item['total'] / total_amount) * 100, 2)
+        return JsonResponse({
+            'data': result,
+            'period': {
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': now.date().strftime('%Y-%m-%d'),
+                'months': months
+            }
+        })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

@@ -32,21 +32,4 @@ class Expense(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"R$ {self.amount} - {self.paid_at}"
-
-class Sale(models.Model):
-    PAYMENT_CHOICES = [
-        ('cash', 'Dinheiro'),
-        ('pix', 'PIX'),
-        ('transfer', 'Transferência'),
-    ]
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    product_or_service = models.CharField(max_length=255)
-    client = models.CharField(max_length=255, blank=True, null=True)
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
-    received_at = models.DateField()
-    payment_method = models.CharField(max_length=50, choices=PAYMENT_CHOICES)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Venda: {self.product_or_service} - R$ {self.amount}" 
+        return f"R$ {self.amount} - {self.paid_at}" 
