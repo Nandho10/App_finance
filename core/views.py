@@ -3,6 +3,8 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
+from django.db.models import Sum, Q
+from django.utils import timezone
 import json
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -205,6 +207,147 @@ expense_id_counter = len(mock_expenses) + 1
 income_id_counter = len(mock_incomes) + 1
 budget_id_counter = len(mock_budgets) + 1
 
+# Importar models
+from .models import Income, Expense, Category, BudgetPlan, BudgetCategoryLimit
+from .models.user_models import User
+
+# Função para obter dados reais do dashboard
+def get_real_dashboard_data():
+    """Busca dados reais do banco de dados para o dashboard"""
+    try:
+        # Por enquanto, vamos usar o primeiro usuário ou criar um se não existir
+        user, created = User.objects.get_or_create(
+            username='test_user',
+            defaults={
+                'email': 'test@example.com',
+                'first_name': 'Usuário',
+                'last_name': 'Teste'
+            }
+        )
+        
+        # Calcular período (último mês)
+        today = timezone.now().date()
+        start_of_month = today.replace(day=1)
+        end_of_month = (start_of_month + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        
+        # Buscar receitas do mês
+        incomes = Income.objects.filter(
+            user=user,
+            received_at__gte=start_of_month,
+            received_at__lte=end_of_month
+        )
+        total_income = incomes.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        # Buscar despesas do mês
+        expenses = Expense.objects.filter(
+            user=user,
+            paid_at__gte=start_of_month,
+            paid_at__lte=end_of_month
+        )
+        total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        # Calcular saldo (receitas - despesas)
+        balance = total_income - total_expenses
+        
+        # Calcular economias (assumindo 25% das receitas)
+        savings = total_income * Decimal('0.25')
+        
+        # Buscar transações recentes (últimas 10)
+        recent_incomes = incomes.order_by('-received_at')[:5]
+        recent_expenses = expenses.order_by('-paid_at')[:5]
+        
+        transactions = []
+        
+        # Adicionar receitas recentes
+        for income in recent_incomes:
+            transactions.append({
+                'id': income.id,
+                'description': income.description or 'Receita',
+                'amount': float(income.amount),
+                'type': 'income',
+                'date': income.received_at.strftime('%Y-%m-%d'),
+                'category': income.category.name if income.category else 'Geral'
+            })
+        
+        # Adicionar despesas recentes
+        for expense in recent_expenses:
+            transactions.append({
+                'id': expense.id + 1000,  # ID único para despesas
+                'description': expense.description or 'Despesa',
+                'amount': -float(expense.amount),  # Negativo para despesas
+                'type': 'expense',
+                'date': expense.paid_at.strftime('%Y-%m-%d'),
+                'category': expense.category.name if expense.category else 'Geral'
+            })
+        
+        # Ordenar transações por data
+        transactions.sort(key=lambda x: x['date'], reverse=True)
+        transactions = transactions[:10]  # Limitar a 10 transações
+        
+        # Dados do gráfico (últimos 3 meses)
+        chart_data = []
+        for i in range(3):
+            month_date = today - timedelta(days=30*i)
+            month_start = month_date.replace(day=1)
+            month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            
+            month_income = Income.objects.filter(
+                user=user,
+                received_at__gte=month_start,
+                received_at__lte=month_end
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            
+            month_expenses = Expense.objects.filter(
+                user=user,
+                paid_at__gte=month_start,
+                paid_at__lte=month_end
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            
+            chart_data.append({
+                'name': month_date.strftime('%b'),
+                'income': float(month_income),
+                'expenses': float(month_expenses)
+            })
+        
+        chart_data.reverse()  # Ordenar cronologicamente
+        
+        # Progresso do orçamento (dados simulados por enquanto)
+        budget_progress = [
+            {
+                'category': 'Alimentação',
+                'spent': float(total_expenses * Decimal('0.3')),
+                'limit': 800,
+                'percentage': min(100, int((float(total_expenses * Decimal('0.3')) / 800) * 100))
+            },
+            {
+                'category': 'Transporte',
+                'spent': float(total_expenses * Decimal('0.2')),
+                'limit': 400,
+                'percentage': min(100, int((float(total_expenses * Decimal('0.2')) / 400) * 100))
+            },
+            {
+                'category': 'Lazer',
+                'spent': float(total_expenses * Decimal('0.1')),
+                'limit': 300,
+                'percentage': min(100, int((float(total_expenses * Decimal('0.1')) / 300) * 100))
+            },
+        ]
+        
+        return {
+            'balance': float(balance),
+            'income': float(total_income),
+            'expenses': float(total_expenses),
+            'savings': float(savings),
+            'transactions': transactions,
+            'budgetProgress': budget_progress,
+            'chartData': chart_data
+        }
+        
+    except Exception as e:
+        print(f"Erro ao buscar dados reais: {e}")
+        # Fallback para dados simulados
+        return get_mock_dashboard_data()
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def dashboard_data(request):
@@ -213,7 +356,7 @@ def dashboard_data(request):
         # TODO: Implementar autenticação real
         # TODO: Buscar dados reais do banco de dados
         
-        data = get_mock_dashboard_data()
+        data = get_real_dashboard_data()
         return JsonResponse(data, safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -223,7 +366,7 @@ def dashboard_data(request):
 def kpis(request):
     """Endpoint para KPIs principais"""
     try:
-        data = get_mock_dashboard_data()
+        data = get_real_dashboard_data()
         kpis = {
             'balance': data['balance'],
             'income': data['income'],
@@ -239,7 +382,7 @@ def kpis(request):
 def recent_transactions(request):
     """Endpoint para transações recentes"""
     try:
-        data = get_mock_dashboard_data()
+        data = get_real_dashboard_data()
         return JsonResponse(data['transactions'], safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -249,7 +392,7 @@ def recent_transactions(request):
 def budget_progress(request):
     """Endpoint para progresso do orçamento"""
     try:
-        data = get_mock_dashboard_data()
+        data = get_real_dashboard_data()
         return JsonResponse(data['budgetProgress'], safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -259,7 +402,7 @@ def budget_progress(request):
 def chart_data(request):
     """Endpoint para dados do gráfico"""
     try:
-        data = get_mock_dashboard_data()
+        data = get_real_dashboard_data()
         return JsonResponse(data['chartData'], safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -268,42 +411,72 @@ def chart_data(request):
 @csrf_exempt
 @require_http_methods(["GET"])
 def expenses_list(request):
-    """Listar todas as despesas"""
+    """Listar todas as despesas do banco de dados"""
     try:
-        # TODO: Implementar filtros por data, categoria, etc.
-        return JsonResponse(mock_expenses, safe=False)
+        user = User.objects.filter(username='test_user').first()
+        if not user:
+            return JsonResponse([], safe=False)
+        expenses = Expense.objects.filter(user=user).order_by('-paid_at')
+        result = []
+        for exp in expenses:
+            result.append({
+                'id': exp.id,
+                'description': exp.description,
+                'amount': float(exp.amount),
+                'category': exp.category.name if exp.category else '',
+                'paid_at': str(exp.paid_at),
+                'payment_method': exp.payment_method,
+                'status': 'paid',
+            })
+        return JsonResponse(result, safe=False)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def expense_create(request):
-    """Criar nova despesa"""
+    """Criar nova despesa (persistente no banco)"""
     try:
-        global expense_id_counter
         data = json.loads(request.body)
-        
         # Validação básica
-        required_fields = ['description', 'amount', 'category', 'date']
+        required_fields = ['description', 'amount', 'category', 'paid_at', 'payment_method']
         for field in required_fields:
             if field not in data:
                 return JsonResponse({'error': f'Campo obrigatório: {field}'}, status=400)
-        
-        # Criar nova despesa
-        new_expense = {
-            'id': expense_id_counter,
-            'description': data['description'],
-            'amount': float(data['amount']),
-            'category': data['category'],
-            'date': data['date'],
-            'payment_method': data.get('payment_method', 'Dinheiro'),
-            'status': data.get('status', 'paid')
+        # Buscar usuário de teste (MVP)
+        user = User.objects.filter(username='test_user').first()
+        if not user:
+            return JsonResponse({'error': 'Usuário não encontrado'}, status=400)
+        # Buscar categoria pelo nome
+        category = Category.objects.filter(user=user, name=data['category'], type='expense').first()
+        if not category:
+            return JsonResponse({'error': 'Categoria não encontrada'}, status=400)
+        # Converter valor para float/decimal
+        try:
+            amount = str(data['amount']).replace(',', '.')
+            amount = float(amount)
+        except Exception:
+            return JsonResponse({'error': 'Valor inválido'}, status=400)
+        # Criar despesa
+        expense = Expense.objects.create(
+            user=user,
+            category=category,
+            amount=amount,
+            description=data['description'],
+            paid_at=data['paid_at'],
+            payment_method=data['payment_method']
+        )
+        # Retornar despesa criada no formato esperado
+        resp = {
+            'id': expense.id,
+            'description': expense.description,
+            'amount': float(expense.amount),
+            'category': category.name,
+            'paid_at': str(expense.paid_at),
+            'payment_method': expense.payment_method,
+            'status': 'paid',
         }
-        
-        mock_expenses.append(new_expense)
-        expense_id_counter += 1
-        
-        return JsonResponse(new_expense, status=201)
+        return JsonResponse(resp, status=201)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'JSON inválido'}, status=400)
     except Exception as e:

@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { Expense } from '@/types/expense';
 import { expenseService } from '@/services/api';
+import ExpenseModal from '@/components/ExpenseModal';
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     loadExpenses();
@@ -76,6 +78,16 @@ export default function ExpensesPage() {
     }
   };
 
+  const paymentMethodLabel = (value: string) => {
+    switch (value) {
+      case 'cash': return 'Dinheiro';
+      case 'credit_card': return 'Cartão de Crédito';
+      case 'pix': return 'PIX';
+      case 'transfer': return 'Transferência';
+      default: return value;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -108,6 +120,13 @@ export default function ExpensesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ExpenseModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={(expense) => {
+          setExpenses((prev) => [expense, ...prev]);
+        }}
+      />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -115,7 +134,10 @@ export default function ExpensesPage() {
             <h1 className="text-3xl font-bold text-gray-900">Despesas</h1>
             <p className="text-gray-600 mt-2">Gerencie suas despesas e controle seus gastos</p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
+            onClick={() => setModalOpen(true)}
+          >
             + Nova Despesa
           </button>
         </div>
@@ -187,7 +209,7 @@ export default function ExpensesPage() {
                           {expense.description}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {expense.payment_method}
+                          {paymentMethodLabel(expense.payment_method)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -200,8 +222,10 @@ export default function ExpensesPage() {
                           {expense.category}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(expense.date)}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-700">
+                          {formatDate(expense.paid_at || expense.date)}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(expense.status)}`}>
