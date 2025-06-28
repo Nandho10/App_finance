@@ -9,6 +9,14 @@ Todas as mudanças importantes do projeto serão documentadas aqui.
 - **Admin Django Configurado**: Interface administrativa para o modelo Venda com filtros e busca
 - **Migração de Banco de Dados**: Tabela de vendas criada e funcional
 - **Configuração SQLite Local**: Ajuste temporário para desenvolvimento local sem Docker
+- **API REST Completa**: Endpoints para CRUD completo de vendas
+  - `GET /api/sales/` - Listar vendas com filtros
+  - `POST /api/sales/create/` - Criar nova venda
+  - `GET /api/sales/{id}/` - Obter detalhes de venda
+  - `PUT /api/sales/{id}/update/` - Atualizar venda
+  - `DELETE /api/sales/{id}/delete/` - Excluir venda
+- **Validações Robustas**: Validação de campos obrigatórios, formatos de data e valores numéricos
+- **Filtros Avançados**: Filtros por data, produto/serviço e forma de recebimento
 
 ### Alterado
 - **Remoção de Modelo Duplicado**: Eliminado o modelo `Sale` antigo para evitar conflitos

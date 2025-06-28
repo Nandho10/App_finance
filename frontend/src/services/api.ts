@@ -3,6 +3,7 @@ import { DashboardData, Transaction, BudgetProgress, ChartData } from '@/types/d
 import { Expense, CreateExpenseData, UpdateExpenseData, ExpenseFilters } from '@/types/expense';
 import { Income, CreateIncomeData, UpdateIncomeData, IncomeFilters } from '@/types/income';
 import { Budget, CreateBudgetData, UpdateBudgetData, BudgetAlert, BudgetAnalysis } from '@/types/budget';
+import { Sale, SaleFormData, SalesFilters } from '@/types/sale';
 
 // Configuração base do axios
 const api = axios.create({
@@ -252,6 +253,51 @@ export const budgetService = {
   getAnalysis: async (): Promise<BudgetAnalysis> => {
     const response = await api.get('/api/budgets/analysis/');
     return response.data;
+  },
+};
+
+// Serviços da API - Vendas
+export const salesService = {
+  // Listar todas as vendas
+  getSales: async (filters?: SalesFilters): Promise<Sale[]> => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) {
+          // Mapear nomes dos campos para o formato da API
+          const apiKey = key === 'startDate' ? 'start_date' : 
+                        key === 'endDate' ? 'end_date' : 
+                        key === 'produtoServico' ? 'produto_servico' : 
+                        key === 'formaRecebimento' ? 'forma_recebimento' : key;
+          params.append(apiKey, value);
+        }
+      });
+    }
+    const response = await api.get(`/api/sales/?${params.toString()}`);
+    return response.data.data || response.data;
+  },
+
+  // Buscar venda específica
+  getSale: async (id: number): Promise<Sale> => {
+    const response = await api.get(`/api/sales/${id}/`);
+    return response.data.data || response.data;
+  },
+
+  // Criar nova venda
+  createSale: async (data: SaleFormData): Promise<Sale> => {
+    const response = await api.post('/api/sales/create/', data);
+    return response.data.data || response.data;
+  },
+
+  // Atualizar venda
+  updateSale: async (id: number, data: Partial<Sale>): Promise<Sale> => {
+    const response = await api.put(`/api/sales/${id}/update/`, data);
+    return response.data.data || response.data;
+  },
+
+  // Deletar venda
+  deleteSale: async (id: number): Promise<void> => {
+    await api.delete(`/api/sales/${id}/delete/`);
   },
 };
 

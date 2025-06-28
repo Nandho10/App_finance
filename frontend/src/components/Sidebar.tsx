@@ -1,12 +1,13 @@
 'use client';
 import { useState } from 'react';
-import { FaChartPie, FaMoneyBillWave, FaWallet, FaListAlt, FaCog, FaChevronLeft, FaChevronRight, FaUserCircle } from 'react-icons/fa';
+import { FaChartPie, FaMoneyBillWave, FaWallet, FaListAlt, FaCog, FaChevronLeft, FaChevronRight, FaUserCircle, FaShoppingCart } from 'react-icons/fa';
 import Link from 'next/link';
 
 const menuItems = [
   { label: 'Dashboard', icon: <FaChartPie />, href: '/' },
   { label: 'Receitas', icon: <FaMoneyBillWave />, href: '/incomes' },
   { label: 'Despesas', icon: <FaWallet />, href: '/expenses' },
+  { label: 'Vendas', icon: <FaShoppingCart />, href: '/sales' },
   { label: 'Orçamentos', icon: <FaListAlt />, href: '/budgets' },
   { label: 'Relatórios', icon: <FaChartPie />, href: '/reports' },
   { label: 'Configurações', icon: <FaCog />, href: '/settings' },
