@@ -16,11 +16,11 @@ Este documento define as fases de desenvolvimento do MVP do aplicativo de gestã
 - [x] Estrutura do projeto Django com models modulares
 - [x] Configuração Docker e PostgreSQL
 - [x] Frontend Next.js com TypeScript e Tailwind
-- [ ] Dashboard responsivo com KPIs
-- [ ] Gráficos de receitas vs despesas
-- [ ] Lista de transações recentes
-- [ ] Indicadores de progresso de orçamento
-- [ ] API endpoints para dados do dashboard
+- [x] Dashboard responsivo com KPIs
+- [x] Gráficos de receitas vs despesas
+- [x] Lista de transações recentes
+- [x] Indicadores de progresso de orçamento
+- [x] API endpoints para dados do dashboard
 
 ### Critérios de Aceitação
 - Dashboard carrega dados reais do banco
@@ -28,7 +28,7 @@ Este documento define as fases de desenvolvimento do MVP do aplicativo de gestã
 - Gráficos interativos e atualizados em tempo real
 - Navegação fluida entre seções
 
-## Fase 2: Gestão de Despesas (Módulo 2)
+## Fase 2: Gestão de Despesas (Módulo 2) ✅ CONCLUÍDA
 **Duração estimada:** 2-3 semanas
 
 ### Objetivos
@@ -38,11 +38,11 @@ Este documento define as fases de desenvolvimento do MVP do aplicativo de gestã
 - Alertas de orçamento
 
 ### Entregáveis
-- [ ] Formulário de cadastro de despesas
-- [ ] Sistema de categorias personalizáveis
-- [ ] Relatórios de gastos (diário, semanal, mensal)
-- [ ] Alertas quando orçamento é excedido
-- [ ] Filtros e busca avançada
+- [x] Formulário de cadastro de despesas
+- [x] Sistema de categorias personalizáveis
+- [x] Relatórios de gastos (diário, semanal, mensal)
+- [x] Alertas quando orçamento é excedido
+- [x] Filtros e busca avançada
 - [ ] Importação de extratos bancários (CSV)
 
 ### Critérios de Aceitação
@@ -144,11 +144,12 @@ Este documento define as fases de desenvolvimento do MVP do aplicativo de gestã
 - **MVP Completo:** Março/Abril 2024
 
 ## Próximos Passos
-1. Finalizar implementação do dashboard
-2. Configurar API endpoints
-3. Integrar frontend com backend
-4. Testes de funcionalidade
-5. Iniciar Fase 2 (Gestão de Despesas)
+1. ✅ Finalizar implementação do dashboard
+2. ✅ Configurar API endpoints
+3. ✅ Integrar frontend com backend
+4. ✅ Testes de funcionalidade
+5. ✅ Iniciar Fase 2 (Gestão de Despesas)
+6. 🔄 Iniciar Fase 3 (Gestão de Receitas)
 
 ## Notas Importantes
 - Cada fase deve resultar em funcionalidade testável
