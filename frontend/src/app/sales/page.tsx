@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { FiPlus, FiFilter, FiSearch, FiEdit, FiTrash2, FiDollarSign } from 'react-icons/fi';
 import SalesModal from '@/components/SalesModal';
+import SalesKPIs from '@/components/SalesKPIs';
+import SalesCharts from '@/components/SalesCharts';
 import { Sale } from '@/types/sale';
 
 export default function SalesPage() {
@@ -145,44 +147,8 @@ export default function SalesPage() {
         </button>
       </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total de Vendas</p>
-              <p className="text-2xl font-bold text-green-600">
-                R$ {totalVendas.toFixed(2)}
-              </p>
-            </div>
-            <FiDollarSign className="text-green-600 text-2xl" />
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total de Custos</p>
-              <p className="text-2xl font-bold text-red-600">
-                R$ {totalCustos.toFixed(2)}
-              </p>
-            </div>
-            <FiDollarSign className="text-red-600 text-2xl" />
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Lucro Bruto</p>
-              <p className="text-2xl font-bold text-blue-600">
-                R$ {totalLucro.toFixed(2)}
-              </p>
-            </div>
-            <FiDollarSign className="text-blue-600 text-2xl" />
-          </div>
-        </div>
-      </div>
+      {/* KPIs de Vendas */}
+      <SalesKPIs />
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow mb-6">
@@ -259,7 +225,7 @@ export default function SalesPage() {
       </div>
 
       {/* Tabela de Vendas */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -327,13 +293,13 @@ export default function SalesPage() {
                           onClick={() => handleEdit(sale)}
                           className="text-blue-600 hover:text-blue-900"
                         >
-                          <FiEdit className="w-4 h-4" />
+                          <FiEdit />
                         </button>
                         <button
                           onClick={() => handleDeleteSale(sale.id)}
                           className="text-red-600 hover:text-red-900"
                         >
-                          <FiTrash2 className="w-4 h-4" />
+                          <FiTrash2 />
                         </button>
                       </div>
                     </td>
@@ -345,15 +311,19 @@ export default function SalesPage() {
         </div>
       </div>
 
+      {/* Gráficos de Vendas */}
+      <SalesCharts />
+
       {/* Modal */}
       {showModal && (
         <SalesModal
-          sale={editingSale}
+          isOpen={showModal}
           onClose={() => {
             setShowModal(false);
             setEditingSale(null);
           }}
-          onSave={editingSale ? handleUpdateSale : handleCreateSale}
+          onSubmit={editingSale ? handleUpdateSale : handleCreateSale}
+          sale={editingSale}
         />
       )}
     </div>

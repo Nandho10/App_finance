@@ -2306,29 +2306,37 @@ def sales_evolution(request):
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=months * 30)
         
-        # Buscar vendas agrupadas por mês
-        vendas_mensais = Venda.objects.filter(
+        # Buscar todas as vendas do período
+        vendas = Venda.objects.filter(
             data__gte=start_date,
             data__lte=end_date
-        ).extra(
-            select={'year_month': "EXTRACT(year FROM data) || '-' || LPAD(EXTRACT(month FROM data)::text, 2, '0')"}
-        ).values('year_month').annotate(
-            total_vendas=Sum('valor_venda'),
-            total_custos=Sum('custo'),
-            quantidade=Count('id')
-        ).annotate(
-            lucro_bruto=F('total_vendas') - F('total_custos')
-        ).order_by('year_month')
+        ).order_by('data')
+        
+        # Agrupar por mês usando Python
+        vendas_por_mes = {}
+        for venda in vendas:
+            periodo = f"{venda.data.year}-{venda.data.month:02d}"
+            if periodo not in vendas_por_mes:
+                vendas_por_mes[periodo] = {
+                    'total_vendas': 0,
+                    'total_custos': 0,
+                    'quantidade': 0
+                }
+            
+            vendas_por_mes[periodo]['total_vendas'] += float(venda.valor_venda)
+            vendas_por_mes[periodo]['total_custos'] += float(venda.custo)
+            vendas_por_mes[periodo]['quantidade'] += 1
         
         # Formatar dados
         evolution = []
-        for venda in vendas_mensais:
+        for periodo in sorted(vendas_por_mes.keys()):
+            dados = vendas_por_mes[periodo]
             evolution.append({
-                'periodo': venda['year_month'],
-                'total_vendas': float(venda['total_vendas']),
-                'total_custos': float(venda['total_custos']),
-                'lucro_bruto': float(venda['lucro_bruto']),
-                'quantidade': venda['quantidade']
+                'periodo': periodo,
+                'total_vendas': dados['total_vendas'],
+                'total_custos': dados['total_custos'],
+                'lucro_bruto': dados['total_vendas'] - dados['total_custos'],
+                'quantidade': dados['quantidade']
             })
         
         return JsonResponse({
