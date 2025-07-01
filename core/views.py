@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseNotAllowed, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
@@ -16,6 +16,7 @@ from django.db import transaction
 from .models.category_models import Category
 from .models.transaction_models import Income, Expense
 from .models.user_models import User
+from .models import Sale
 
 # Simulação de dados para o MVP (será substituído por dados reais do banco)
 def get_mock_dashboard_data():
@@ -1868,3 +1869,83 @@ def top_expense_categories(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+# --- API de Vendas ---
+def sale_to_dict(sale):
+    return {
+        'id': sale.id,
+        'paid_at': sale.paid_at.isoformat(),
+        'product': sale.product,
+        'amount': float(sale.amount),
+        'custo': float(sale.custo),
+        'payment_method': sale.payment_method,
+        'observacoes': sale.observacoes or '',
+        'delivery_date': sale.delivery_date.isoformat() if sale.delivery_date else None,
+        'client': sale.client or ''
+    }
+
+@csrf_exempt
+def sales_list(request):
+    if request.method == 'GET':
+        qs = Sale.objects.all()
+        paid_at_start = request.GET.get('paid_at_start')
+        paid_at_end = request.GET.get('paid_at_end')
+        product = request.GET.get('product')
+        client = request.GET.get('client')
+        if paid_at_start:
+            qs = qs.filter(paid_at__gte=paid_at_start)
+        if paid_at_end:
+            qs = qs.filter(paid_at__lte=paid_at_end)
+        if product:
+            qs = qs.filter(product__icontains=product)
+        if client:
+            qs = qs.filter(client__icontains=client)
+        data = [sale_to_dict(s) for s in qs.order_by('-paid_at')]
+        return JsonResponse(data, safe=False)
+    elif request.method == 'POST':
+        try:
+            payload = json.loads(request.body)
+            sale = Sale.objects.create(
+                paid_at=payload['paid_at'],
+                product=payload['product'],
+                amount=payload['amount'],
+                custo=payload.get('custo', 0),
+                payment_method=payload['payment_method'],
+                observacoes=payload.get('observacoes', ''),
+                delivery_date=payload.get('delivery_date'),
+                client=payload.get('client', '')
+            )
+            return JsonResponse(sale_to_dict(sale), status=201)
+        except Exception as e:
+            return HttpResponseBadRequest(str(e))
+    else:
+        return HttpResponseNotAllowed(['GET', 'POST'])
+
+@csrf_exempt
+def sale_detail(request, sale_id):
+    try:
+        sale = Sale.objects.get(id=sale_id)
+    except Sale.DoesNotExist:
+        return JsonResponse({'error': 'Venda não encontrada'}, status=404)
+    if request.method == 'GET':
+        return JsonResponse(sale_to_dict(sale))
+    elif request.method == 'PUT':
+        try:
+            payload = json.loads(request.body)
+            sale.paid_at = payload.get('paid_at', sale.paid_at)
+            sale.product = payload.get('product', sale.product)
+            sale.amount = payload.get('amount', sale.amount)
+            sale.custo = payload.get('custo', sale.custo)
+            sale.payment_method = payload.get('payment_method', sale.payment_method)
+            sale.observacoes = payload.get('observacoes', sale.observacoes)
+            sale.delivery_date = payload.get('delivery_date', sale.delivery_date)
+            sale.client = payload.get('client', sale.client)
+            sale.save()
+            return JsonResponse(sale_to_dict(sale))
+        except Exception as e:
+            return HttpResponseBadRequest(str(e))
+    elif request.method == 'DELETE':
+        sale.delete()
+        return JsonResponse({'success': True})
+    else:
+        return HttpResponseNotAllowed(['GET', 'PUT', 'DELETE'])

@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models.category_models import Category
 from .models.transaction_models import Income, Expense
 from .models.user_models import User
+from .models import Sale
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -31,3 +32,5 @@ class UserAdmin(admin.ModelAdmin):
     list_display = ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff']
     search_fields = ['username', 'email', 'first_name', 'last_name']
     ordering = ['username']
+
+admin.site.register(Sale)

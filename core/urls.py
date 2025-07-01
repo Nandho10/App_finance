@@ -68,4 +68,7 @@ urlpatterns = [
     path('api/expense-by-category/', views.expense_by_category, name='expense_by_category'),
     path('api/expense-evolution/', views.expense_evolution, name='expense_evolution'),
     path('api/top-expense-categories/', views.top_expense_categories, name='top_expense_categories'),
+    
+    path('api/sales/', views.sales_list, name='sales_list'),
+    path('api/sales/<int:sale_id>/', views.sale_detail, name='sale_detail'),
 ] 

@@ -6,6 +6,7 @@ import Link from 'next/link';
 const menuItems = [
   { label: 'Dashboard', icon: <FaChartPie />, href: '/' },
   { label: 'Receitas', icon: <FaMoneyBillWave />, href: '/incomes' },
+  { label: 'Vendas', icon: <FaShoppingCart />, href: '/sales' },
   { label: 'Despesas', icon: <FaWallet />, href: '/expenses' },
   { label: 'Orçamentos', icon: <FaListAlt />, href: '/budgets' },
   { label: 'Relatórios', icon: <FaChartPie />, href: '/reports' },

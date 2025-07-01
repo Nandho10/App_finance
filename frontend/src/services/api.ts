@@ -244,4 +244,46 @@ export const budgetService = {
   },
 };
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+
+// --- Vendas ---
+export async function getSales(params = {}) {
+  const query = new URLSearchParams(params as any).toString();
+  const res = await fetch(`${API_BASE}/api/sales/${query ? `?${query}` : ''}`);
+  if (!res.ok) throw new Error('Erro ao buscar vendas');
+  return res.json();
+}
+
+export async function getSale(id: number) {
+  const res = await fetch(`${API_BASE}/api/sales/${id}/`);
+  if (!res.ok) throw new Error('Erro ao buscar venda');
+  return res.json();
+}
+
+export async function createSale(data: any) {
+  const res = await fetch(`${API_BASE}/api/sales/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Erro ao criar venda');
+  return res.json();
+}
+
+export async function updateSale(id: number, data: any) {
+  const res = await fetch(`${API_BASE}/api/sales/${id}/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Erro ao atualizar venda');
+  return res.json();
+}
+
+export async function deleteSale(id: number) {
+  const res = await fetch(`${API_BASE}/api/sales/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Erro ao deletar venda');
+  return res.json();
+}
+
 export default api; 
