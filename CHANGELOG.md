@@ -148,6 +148,24 @@ Todas as mudanças importantes do projeto serão documentadas aqui.
 - Removidas todas as referências a campos antigos (produto_servico, valor_venda, forma_recebimento, data, etc.) do frontend e dos tipos TypeScript.
 - Labels e colunas padronizados em português.
 
+## [2025-07-01] - Módulo de Vendas Completo
+### Adicionado
+- Modelagem do banco de dados para vendas (Sale)
+- Comando de importação de vendas via Excel (import_sales_excel)
+- API REST completa para vendas (/api/sales/)
+- CRUD completo no frontend (Next.js)
+- KPIs: total vendido, lucro total, ticket médio, top clientes
+- Gráficos: vendas por produto, evolução do lucro, top clientes
+- Filtros dinâmicos por período, produto, cliente
+- Modal de cadastro/edição de vendas
+- Integração total backend/frontend
+- Link de Vendas no menu lateral
+
+### Corrigido
+- Erro de redirect infinito na API de vendas
+- Registro do plugin Filler no Chart.js para gráficos
+- Ajuste de proxy/API_BASE para ambiente de desenvolvimento
+
 ## [Unreleased]
 
 ### Added
@@ -184,6 +202,7 @@ Todas as mudanças importantes do projeto serão documentadas aqui.
 - Adicionados dados de teste para vendas
 - Melhorada validação de formulários no SalesModal
 - Simplificada configuração de rewrite no Next.js
+- fix: corrigido o envio do campo category no cadastro de despesas pelo frontend (agora envia o nome da categoria, não o ID), evitando erro 400 no backend.
 
 ## [0.1.0] - 2025-06-28
 
