@@ -109,8 +109,12 @@ export default function ExpenseModal({
         }, 1000);
       } else {
         // Criar nova despesa
-        const data = { ...form, amount: Number(form.amount), category_id: Number(form.category) };
-        delete data.category;
+        const selectedCategory = categories.find(cat => String(cat.id) === String(form.category));
+        const data = {
+          ...form,
+          amount: Number(form.amount),
+          category: selectedCategory ? selectedCategory.name : '',
+        };
         const expense = await expenseService.createExpense(data);
         setSuccess(true);
         onCreated(expense);
