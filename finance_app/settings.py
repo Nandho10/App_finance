@@ -69,6 +69,10 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
+# Configurações adicionais para desenvolvimento
+CORS_ALLOW_ALL_ORIGINS = True  # Apenas para desenvolvimento
+CORS_ALLOW_ALL_METHODS = True  # Apenas para desenvolvimento
+
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',

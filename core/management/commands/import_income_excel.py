@@ -63,7 +63,8 @@ class Command(BaseCommand):
                 'amount': ['valor', 'amount', 'montante', 'preço'],
                 'category': ['categoria', 'category', 'cat'],
                 'date': ['data', 'date', 'data_recebimento', 'received_at'],
-                'source': ['fonte', 'source', 'origem']
+                'source': ['fonte', 'source', 'origem'],
+                'account': ['conta', 'account', 'banco', 'conta_bancaria']
             }
             
             # Encontrar colunas correspondentes
@@ -135,12 +136,20 @@ class Command(BaseCommand):
                             if source.lower() == 'nan':
                                 source = None
                         
+                        # Processar conta
+                        account = None
+                        if 'account' in found_columns:
+                            account = str(row[found_columns['account']]).strip()
+                            if account.lower() == 'nan':
+                                account = None
+                        
                         if not dry_run:
                             # Criar receita
                             income = Income.objects.create(
                                 description=description,
                                 amount=Decimal(str(amount)),
                                 category=category,
+                                account=account,
                                 received_at=date,
                                 user_id=user_id
                             )

@@ -83,6 +83,19 @@ Aplicativo de gestão financeira pessoal com backend em Django/PostgreSQL e fron
 - Lista de transações recentes
 - Design responsivo
 
+### ✅ Módulo de Vendas
+- **CRUD Completo de Vendas**: Criar, listar, editar e excluir vendas.
+- **Campos padronizados**: Todas as vendas utilizam os campos:
+  - `product` (Produto)
+  - `amount` (Valor)
+  - `payment_method` (Forma de Pagamento)
+  - `paid_at` (Data de Pagamento)
+  - `custo` (Custo)
+  - `lucro_bruto` (Lucro Bruto, calculado automaticamente)
+  - `observacoes` (Observações, opcional)
+- **KPIs e Relatórios**: Total de vendas, custos, lucro bruto, ticket médio, evolução mensal, vendas por produto, top produtos por lucro.
+- **Filtros e Gráficos**: Filtros dinâmicos por período, produto e forma de pagamento.
+
 ## 🔧 API Endpoints - Receitas
 
 ### Categorias de Receitas
@@ -212,6 +225,18 @@ Os dashboards, relatórios e KPIs de despesas agora consomem dados reais do back
 ### Gerenciamento de Categorias de Despesas no Frontend
 
 Agora é possível criar, editar, excluir e migrar categorias de despesas diretamente pelo frontend, com integração total ao backend. O modal de categorias permite todas as operações, inclusive migração de despesas antes da exclusão.
+
+## 🔧 API Endpoints - Vendas
+
+- `GET /api/sales/` — Listar vendas (filtros: data, produto, forma de pagamento)
+- `POST /api/sales/create/` — Criar venda
+- `GET /api/sales/{id}/` — Detalhes da venda
+- `PUT /api/sales/{id}/update/` — Atualizar venda
+- `DELETE /api/sales/{id}/delete/` — Excluir venda
+- `GET /api/sales-kpis/` — KPIs de vendas
+- `GET /api/sales-by-product/` — Vendas por produto
+- `GET /api/sales-evolution/` — Evolução mensal
+- `GET /api/top-sales-products/` — Top produtos por lucro
 
 ---
 

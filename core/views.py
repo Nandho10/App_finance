@@ -15,7 +15,6 @@ from django.db import transaction
 # Importar modelos
 from .models.category_models import Category
 from .models.transaction_models import Income, Expense
-from .models.sales_models import Venda
 from .models.user_models import User
 
 # Simulação de dados para o MVP (será substituído por dados reais do banco)
@@ -224,49 +223,25 @@ from .models.user_models import User
 def get_real_dashboard_data():
     """Busca dados reais do banco de dados para o dashboard"""
     try:
-        # Por enquanto, vamos usar o primeiro usuário ou criar um se não existir
-        user, created = User.objects.get_or_create(
-            username='test_user',
-            defaults={
-                'email': 'test@example.com',
-                'first_name': 'Usuário',
-                'last_name': 'Teste'
-            }
-        )
-        
-        # Calcular período (último mês)
-        today = timezone.now().date()
-        start_of_month = today.replace(day=1)
-        end_of_month = (start_of_month + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        
-        # Buscar receitas do mês
-        incomes = Income.objects.filter(
-            user=user,
-            received_at__gte=start_of_month,
-            received_at__lte=end_of_month
-        )
+        # Buscar todas as receitas e despesas (acumulado)
+        incomes = Income.objects.all()
+        expenses = Expense.objects.all()
+
         total_income = incomes.aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        
-        # Buscar despesas do mês
-        expenses = Expense.objects.filter(
-            user=user,
-            paid_at__gte=start_of_month,
-            paid_at__lte=end_of_month
-        )
         total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or Decimal('0')
-        
+
         # Calcular saldo (receitas - despesas)
         balance = total_income - total_expenses
-        
+
         # Calcular economias (assumindo 25% das receitas)
         savings = total_income * Decimal('0.25')
-        
+
         # Buscar transações recentes (últimas 10)
         recent_incomes = incomes.order_by('-received_at')[:5]
         recent_expenses = expenses.order_by('-paid_at')[:5]
-        
+
         transactions = []
-        
+
         # Adicionar receitas recentes
         for income in recent_incomes:
             transactions.append({
@@ -277,7 +252,7 @@ def get_real_dashboard_data():
                 'date': income.received_at.strftime('%Y-%m-%d'),
                 'category': income.category.name if income.category else 'Geral'
             })
-        
+
         # Adicionar despesas recentes
         for expense in recent_expenses:
             transactions.append({
@@ -288,38 +263,37 @@ def get_real_dashboard_data():
                 'date': expense.paid_at.strftime('%Y-%m-%d'),
                 'category': expense.category.name if expense.category else 'Geral'
             })
-        
+
         # Ordenar transações por data
         transactions.sort(key=lambda x: x['date'], reverse=True)
         transactions = transactions[:10]  # Limitar a 10 transações
-        
+
         # Dados do gráfico (últimos 3 meses)
+        today = timezone.now().date()
         chart_data = []
         for i in range(3):
             month_date = today - timedelta(days=30*i)
             month_start = month_date.replace(day=1)
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-            
+
             month_income = Income.objects.filter(
-                user=user,
                 received_at__gte=month_start,
                 received_at__lte=month_end
             ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-            
+
             month_expenses = Expense.objects.filter(
-                user=user,
                 paid_at__gte=month_start,
                 paid_at__lte=month_end
             ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
-            
+
             chart_data.append({
                 'name': month_date.strftime('%b'),
                 'income': float(month_income),
                 'expenses': float(month_expenses)
             })
-        
+
         chart_data.reverse()  # Ordenar cronologicamente
-        
+
         # Progresso do orçamento (dados simulados por enquanto)
         budget_progress = [
             {
@@ -341,7 +315,7 @@ def get_real_dashboard_data():
                 'percentage': min(100, int((float(total_expenses * Decimal('0.1')) / 300) * 100))
             },
         ]
-        
+
         return {
             'balance': float(balance),
             'income': float(total_income),
@@ -351,7 +325,7 @@ def get_real_dashboard_data():
             'budgetProgress': budget_progress,
             'chartData': chart_data
         }
-        
+
     except Exception as e:
         print(f"Erro ao buscar dados reais: {e}")
         # Fallback para dados simulados
@@ -1894,506 +1868,3 @@ def top_expense_categories(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
-# ==================== VENDAS ====================
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def sales_list(request):
-    """Listar todas as vendas com filtros opcionais"""
-    try:
-        # Parâmetros de filtro
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-        produto_servico = request.GET.get('produto_servico')
-        forma_recebimento = request.GET.get('forma_recebimento')
-        
-        # Query base
-        vendas = Venda.objects.all()
-        
-        # Aplicar filtros
-        if start_date:
-            vendas = vendas.filter(data__gte=start_date)
-        if end_date:
-            vendas = vendas.filter(data__lte=end_date)
-        if produto_servico:
-            vendas = vendas.filter(produto_servico__icontains=produto_servico)
-        if forma_recebimento:
-            vendas = vendas.filter(forma_recebimento=forma_recebimento)
-        
-        # Ordenar por data (mais recente primeiro)
-        vendas = vendas.order_by('-data')
-        
-        # Serializar dados
-        sales_data = []
-        for venda in vendas:
-            sales_data.append({
-                'id': venda.id,
-                'data': venda.data.strftime('%Y-%m-%d'),
-                'produto_servico': venda.produto_servico,
-                'valor_venda': float(venda.valor_venda),
-                'custo': float(venda.custo),
-                'lucro_bruto': float(venda.lucro_bruto),
-                'forma_recebimento': venda.forma_recebimento,
-                'observacoes': venda.observacoes or '',
-            })
-        
-        return JsonResponse({
-            'success': True,
-            'data': sales_data,
-            'total': len(sales_data)
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def sale_create(request):
-    """Criar nova venda"""
-    try:
-        data = json.loads(request.body)
-        
-        # Validações básicas
-        required_fields = ['data', 'produto_servico', 'valor_venda', 'custo', 'forma_recebimento']
-        for field in required_fields:
-            if field not in data or not data[field]:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Campo obrigatório: {field}'
-                }, status=400)
-        
-        # Validar valores numéricos
-        try:
-            valor_venda = Decimal(str(data['valor_venda']))
-            custo = Decimal(str(data['custo']))
-        except (ValueError, TypeError):
-            return JsonResponse({
-                'success': False,
-                'error': 'Valor da venda e custo devem ser números válidos'
-            }, status=400)
-        
-        # Validar data
-        try:
-            data_venda = datetime.strptime(data['data'], '%Y-%m-%d').date()
-        except ValueError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Data deve estar no formato YYYY-MM-DD'
-            }, status=400)
-        
-        # Criar venda
-        venda = Venda.objects.create(
-            data=data_venda,
-            produto_servico=data['produto_servico'],
-            valor_venda=valor_venda,
-            custo=custo,
-            forma_recebimento=data['forma_recebimento'],
-            observacoes=data.get('observacoes', '')
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
-                'id': venda.id,
-                'data': venda.data.strftime('%Y-%m-%d'),
-                'produto_servico': venda.produto_servico,
-                'valor_venda': float(venda.valor_venda),
-                'custo': float(venda.custo),
-                'lucro_bruto': float(venda.lucro_bruto),
-                'forma_recebimento': venda.forma_recebimento,
-                'observacoes': venda.observacoes or '',
-            },
-            'message': 'Venda criada com sucesso'
-        }, status=201)
-        
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': 'JSON inválido'
-        }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def sale_detail(request, sale_id):
-    """Obter detalhes de uma venda específica"""
-    try:
-        venda = Venda.objects.get(id=sale_id)
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
-                'id': venda.id,
-                'data': venda.data.strftime('%Y-%m-%d'),
-                'produto_servico': venda.produto_servico,
-                'valor_venda': float(venda.valor_venda),
-                'custo': float(venda.custo),
-                'lucro_bruto': float(venda.lucro_bruto),
-                'forma_recebimento': venda.forma_recebimento,
-                'observacoes': venda.observacoes or '',
-            }
-        })
-        
-    except Venda.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Venda não encontrada'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["PUT"])
-def sale_update(request, sale_id):
-    """Atualizar uma venda existente"""
-    try:
-        venda = Venda.objects.get(id=sale_id)
-        data = json.loads(request.body)
-        
-        # Atualizar campos se fornecidos
-        if 'data' in data:
-            try:
-                venda.data = datetime.strptime(data['data'], '%Y-%m-%d').date()
-            except ValueError:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Data deve estar no formato YYYY-MM-DD'
-                }, status=400)
-        
-        if 'produto_servico' in data:
-            venda.produto_servico = data['produto_servico']
-        
-        if 'valor_venda' in data:
-            try:
-                venda.valor_venda = Decimal(str(data['valor_venda']))
-            except (ValueError, TypeError):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Valor da venda deve ser um número válido'
-                }, status=400)
-        
-        if 'custo' in data:
-            try:
-                venda.custo = Decimal(str(data['custo']))
-            except (ValueError, TypeError):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Custo deve ser um número válido'
-                }, status=400)
-        
-        if 'forma_recebimento' in data:
-            venda.forma_recebimento = data['forma_recebimento']
-        
-        if 'observacoes' in data:
-            venda.observacoes = data['observacoes']
-        
-        venda.save()
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
-                'id': venda.id,
-                'data': venda.data.strftime('%Y-%m-%d'),
-                'produto_servico': venda.produto_servico,
-                'valor_venda': float(venda.valor_venda),
-                'custo': float(venda.custo),
-                'lucro_bruto': float(venda.lucro_bruto),
-                'forma_recebimento': venda.forma_recebimento,
-                'observacoes': venda.observacoes or '',
-            },
-            'message': 'Venda atualizada com sucesso'
-        })
-        
-    except Venda.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Venda não encontrada'
-        }, status=404)
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': 'JSON inválido'
-        }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["DELETE"])
-def sale_delete(request, sale_id):
-    """Excluir uma venda"""
-    try:
-        venda = Venda.objects.get(id=sale_id)
-        venda.delete()
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Venda excluída com sucesso'
-        })
-        
-    except Venda.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Venda não encontrada'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-# ==================== KPIs E RELATÓRIOS DE VENDAS ====================
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def sales_kpis(request):
-    """KPIs principais de vendas"""
-    try:
-        # Parâmetros de filtro
-        month = request.GET.get('month')
-        year = request.GET.get('year')
-        
-        # Se não especificado, usar mês atual
-        if not month or not year:
-            today = timezone.now().date()
-            month = today.month
-            year = today.year
-        
-        # Filtrar vendas do período
-        vendas = Venda.objects.filter(
-            data__year=year,
-            data__month=month
-        )
-        
-        # Calcular KPIs
-        total_vendas = vendas.aggregate(
-            total=Sum('valor_venda')
-        )['total'] or 0
-        
-        total_custos = vendas.aggregate(
-            total=Sum('custo')
-        )['total'] or 0
-        
-        total_lucro = total_vendas - total_custos
-        
-        quantidade_vendas = vendas.count()
-        
-        ticket_medio = total_vendas / quantidade_vendas if quantidade_vendas > 0 else 0
-        
-        # Margem de lucro
-        margem_lucro = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
-        
-        # Mês anterior para comparação
-        if month == 1:
-            prev_month = 12
-            prev_year = year - 1
-        else:
-            prev_month = month - 1
-            prev_year = year
-        
-        vendas_anterior = Venda.objects.filter(
-            data__year=prev_year,
-            data__month=prev_month
-        ).aggregate(
-            total=Sum('valor_venda')
-        )['total'] or 0
-        
-        # Crescimento percentual
-        crescimento = 0
-        if vendas_anterior > 0:
-            crescimento = ((total_vendas - vendas_anterior) / vendas_anterior) * 100
-        
-        return JsonResponse({
-            'success': True,
-            'data': {
-                'total_vendas': float(total_vendas),
-                'total_custos': float(total_custos),
-                'total_lucro': float(total_lucro),
-                'quantidade_vendas': quantidade_vendas,
-                'ticket_medio': float(ticket_medio),
-                'margem_lucro': float(margem_lucro),
-                'crescimento_percentual': float(crescimento),
-                'periodo': f"{year}-{month:02d}"
-            }
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def sales_by_product(request):
-    """Vendas por produto/serviço"""
-    try:
-        # Parâmetros de filtro
-        start_date = request.GET.get('start_date')
-        end_date = request.GET.get('end_date')
-        limit = int(request.GET.get('limit', 10))
-        
-        # Query base
-        vendas = Venda.objects.all()
-        
-        # Aplicar filtros de data
-        if start_date:
-            vendas = vendas.filter(data__gte=start_date)
-        if end_date:
-            vendas = vendas.filter(data__lte=end_date)
-        
-        # Agrupar por produto/serviço
-        produtos_data = vendas.values('produto_servico').annotate(
-            total_vendas=Sum('valor_venda'),
-            total_custos=Sum('custo'),
-            quantidade=Count('id')
-        ).annotate(
-            lucro_bruto=F('total_vendas') - F('total_custos')
-        ).order_by('-total_vendas')[:limit]
-        
-        # Calcular totais para percentuais
-        total_geral = vendas.aggregate(
-            total=Sum('valor_venda')
-        )['total'] or 0
-        
-        # Formatar dados
-        produtos = []
-        for produto in produtos_data:
-            percentual = (produto['total_vendas'] / total_geral * 100) if total_geral > 0 else 0
-            produtos.append({
-                'produto_servico': produto['produto_servico'],
-                'total_vendas': float(produto['total_vendas']),
-                'total_custos': float(produto['total_custos']),
-                'lucro_bruto': float(produto['lucro_bruto']),
-                'quantidade': produto['quantidade'],
-                'percentual': float(percentual)
-            })
-        
-        return JsonResponse({
-            'success': True,
-            'data': produtos,
-            'total_geral': float(total_geral)
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def sales_evolution(request):
-    """Evolução mensal das vendas"""
-    try:
-        # Parâmetros
-        months = int(request.GET.get('months', 6))
-        
-        # Calcular data de início
-        end_date = timezone.now().date()
-        start_date = end_date - timedelta(days=months * 30)
-        
-        # Buscar todas as vendas do período
-        vendas = Venda.objects.filter(
-            data__gte=start_date,
-            data__lte=end_date
-        ).order_by('data')
-        
-        # Agrupar por mês usando Python
-        vendas_por_mes = {}
-        for venda in vendas:
-            periodo = f"{venda.data.year}-{venda.data.month:02d}"
-            if periodo not in vendas_por_mes:
-                vendas_por_mes[periodo] = {
-                    'total_vendas': 0,
-                    'total_custos': 0,
-                    'quantidade': 0
-                }
-            
-            vendas_por_mes[periodo]['total_vendas'] += float(venda.valor_venda)
-            vendas_por_mes[periodo]['total_custos'] += float(venda.custo)
-            vendas_por_mes[periodo]['quantidade'] += 1
-        
-        # Formatar dados
-        evolution = []
-        for periodo in sorted(vendas_por_mes.keys()):
-            dados = vendas_por_mes[periodo]
-            evolution.append({
-                'periodo': periodo,
-                'total_vendas': dados['total_vendas'],
-                'total_custos': dados['total_custos'],
-                'lucro_bruto': dados['total_vendas'] - dados['total_custos'],
-                'quantidade': dados['quantidade']
-            })
-        
-        return JsonResponse({
-            'success': True,
-            'data': evolution
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def top_sales_products(request):
-    """Top produtos/serviços por lucro"""
-    try:
-        # Parâmetros
-        limit = int(request.GET.get('limit', 5))
-        months = int(request.GET.get('months', 6))
-        
-        # Calcular data de início
-        end_date = timezone.now().date()
-        start_date = end_date - timedelta(days=months * 30)
-        
-        # Buscar top produtos por lucro
-        top_produtos = Venda.objects.filter(
-            data__gte=start_date,
-            data__lte=end_date
-        ).values('produto_servico').annotate(
-            total_vendas=Sum('valor_venda'),
-            total_custos=Sum('custo'),
-            quantidade=Count('id')
-        ).annotate(
-            lucro_bruto=F('total_vendas') - F('total_custos')
-        ).order_by('-lucro_bruto')[:limit]
-        
-        # Formatar dados
-        produtos = []
-        for produto in top_produtos:
-            produtos.append({
-                'produto_servico': produto['produto_servico'],
-                'total_vendas': float(produto['total_vendas']),
-                'total_custos': float(produto['total_custos']),
-                'lucro_bruto': float(produto['lucro_bruto']),
-                'quantidade': produto['quantidade'],
-                'margem_lucro': float((produto['lucro_bruto'] / produto['total_vendas'] * 100) if produto['total_vendas'] > 0 else 0)
-            })
-        
-        return JsonResponse({
-            'success': True,
-            'data': produtos
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)

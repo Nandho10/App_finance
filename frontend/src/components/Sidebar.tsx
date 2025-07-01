@@ -7,7 +7,6 @@ const menuItems = [
   { label: 'Dashboard', icon: <FaChartPie />, href: '/' },
   { label: 'Receitas', icon: <FaMoneyBillWave />, href: '/incomes' },
   { label: 'Despesas', icon: <FaWallet />, href: '/expenses' },
-  { label: 'Vendas', icon: <FaShoppingCart />, href: '/sales' },
   { label: 'Orçamentos', icon: <FaListAlt />, href: '/budgets' },
   { label: 'Relatórios', icon: <FaChartPie />, href: '/reports' },
   { label: 'Configurações', icon: <FaCog />, href: '/settings' },

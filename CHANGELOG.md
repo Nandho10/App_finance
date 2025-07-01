@@ -2,6 +2,37 @@
 
 Todas as mudanças importantes do projeto serão documentadas aqui.
 
+## [2025-01-16] - Importação de Despesas Real
+### Adicionado
+- **Comando Personalizado**: `import_despesas_xlsx` criado especificamente para a planilha Despesas.xlsx
+- **Importação Bem-sucedida**: 588 despesas importadas com sucesso da planilha real
+- **Mapeamento de Colunas**: Adaptação automática para as colunas específicas da planilha
+- **Processamento de Pagamentos**: Filtro automático para despesas já pagas
+- **Categorias Criadas**: 9 categorias de despesas criadas automaticamente
+
+### Importado
+- **Total de Despesas**: 588 registros
+- **Categorias Principais**: Alimentação (331), Transporte (69), Moradia (43), Educação (31), Confeitaria (49)
+- **Formas de Pagamento**: Mapeamento automático de "Compra Elo Debito Vista" para credit_card, "Boleto" para transfer
+- **Campo Favored**: Todos os favorecidos importados corretamente
+- **Período**: Dados de 2025-01-02 em diante
+
+### Alterado
+- **Comando de Importação**: Adaptado para processar colunas específicas da planilha real
+- **Mapeamento de Pagamentos**: Lógica específica para formas de pagamento da planilha
+
+## [2025-01-16] - Campos Adicionais em Receitas e Despesas
+### Adicionado
+- **Campo Account em Receitas**: Novo campo `account` no modelo `Income` para informar em qual conta foi creditado
+- **Campo Favored em Despesas**: Novo campo `favored` no modelo `Expense` para informar para quem foi pago
+- **Migração de Banco**: Migração `0003_expense_favored_income_account` aplicada com sucesso
+- **Admin Atualizado**: Interface administrativa atualizada para exibir os novos campos
+- **Script de Verificação**: Atualizado para mostrar os novos campos nos dados
+
+### Alterado
+- **Modelos de Transação**: Adicionados campos opcionais para melhor rastreabilidade
+- **Campos de Busca**: Admin agora permite buscar por conta (receitas) e favorecido (despesas)
+
 ## [2025-01-16] - Fase 4: Módulo de Vendas
 ### Adicionado
 - **Modelagem de Vendas**: Novo modelo `Venda` com campos para data, produto/serviço, valor da venda, custo, forma de recebimento e observações
@@ -111,6 +142,12 @@ Todas as mudanças importantes do projeto serão documentadas aqui.
 ### Corrigido
 - Ajuste de .gitignore para não versionar .env
 
+## [2025-06-27] - Padronização dos Campos do Módulo de Vendas
+### Alterado
+- Todos os componentes, páginas, filtros, gráficos e KPIs de vendas agora utilizam exclusivamente os campos: product, amount, payment_method, paid_at, custo, lucro_bruto, observacoes.
+- Removidas todas as referências a campos antigos (produto_servico, valor_venda, forma_recebimento, data, etc.) do frontend e dos tipos TypeScript.
+- Labels e colunas padronizados em português.
+
 ## [Unreleased]
 
 ### Added
@@ -140,6 +177,13 @@ Todas as mudanças importantes do projeto serão documentadas aqui.
 - Botão "Nova Receita" não abria modal
 - **Botão "Editar" não tinha funcionalidade implementada (Receitas)**
 - **Botão "Editar" não tinha funcionalidade implementada (Despesas)**
+- Corrigido erro de redirecionamento infinito na API de vendas
+- Corrigido erro "onSave is not a function" no SalesModal
+- Melhorado campo de forma de pagamento para usar select com opções predefinidas
+- Corrigidas configurações de CORS para desenvolvimento
+- Adicionados dados de teste para vendas
+- Melhorada validação de formulários no SalesModal
+- Simplificada configuração de rewrite no Next.js
 
 ## [0.1.0] - 2025-06-28
 

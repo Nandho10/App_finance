@@ -15,25 +15,13 @@ const api = axios.create({
 
 // Interceptor para logs de debug
 api.interceptors.request.use(
-  (config) => {
-    console.log('API Request:', config.method?.toUpperCase(), config.url);
-    return config;
-  },
-  (error) => {
-    console.error('API Request Error:', error);
-    return Promise.reject(error);
-  }
+  (config) => config,
+  (error: any) => Promise.reject(error)
 );
 
 api.interceptors.response.use(
-  (response) => {
-    console.log('API Response:', response.status, response.config.url);
-    return response;
-  },
-  (error) => {
-    console.error('API Response Error:', error.response?.status, error.response?.data);
-    return Promise.reject(error);
-  }
+  (response) => response,
+  (error: any) => Promise.reject(error)
 );
 
 // Serviços da API - Dashboard
@@ -253,79 +241,6 @@ export const budgetService = {
   getAnalysis: async (): Promise<BudgetAnalysis> => {
     const response = await api.get('/api/budgets/analysis/');
     return response.data;
-  },
-};
-
-// Serviços da API - Vendas
-export const salesService = {
-  // Listar todas as vendas
-  getSales: async (filters?: SalesFilters): Promise<Sale[]> => {
-    const params = new URLSearchParams();
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) {
-          // Mapear nomes dos campos para o formato da API
-          const apiKey = key === 'startDate' ? 'start_date' : 
-                        key === 'endDate' ? 'end_date' : 
-                        key === 'produtoServico' ? 'produto_servico' : 
-                        key === 'formaRecebimento' ? 'forma_recebimento' : key;
-          params.append(apiKey, value);
-        }
-      });
-    }
-    const response = await api.get(`/api/sales/?${params.toString()}`);
-    return response.data.data || response.data;
-  },
-
-  // Buscar venda específica
-  getSale: async (id: number): Promise<Sale> => {
-    const response = await api.get(`/api/sales/${id}/`);
-    return response.data.data || response.data;
-  },
-
-  // Criar nova venda
-  createSale: async (data: SaleFormData): Promise<Sale> => {
-    const response = await api.post('/api/sales/create/', data);
-    return response.data.data || response.data;
-  },
-
-  // Atualizar venda
-  updateSale: async (id: number, data: Partial<Sale>): Promise<Sale> => {
-    const response = await api.put(`/api/sales/${id}/update/`, data);
-    return response.data.data || response.data;
-  },
-
-  // Deletar venda
-  deleteSale: async (id: number): Promise<void> => {
-    await api.delete(`/api/sales/${id}/delete/`);
-  },
-
-  // KPIs de vendas
-  getKPIs: async (params?: { month?: string; year?: string }): Promise<SalesKPIs> => {
-    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
-    const response = await api.get(`/api/sales-kpis/${query}`);
-    return response.data.data || response.data;
-  },
-
-  // Vendas por produto
-  getByProduct: async (params?: { start_date?: string; end_date?: string; limit?: number }): Promise<SalesByProduct[]> => {
-    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
-    const response = await api.get(`/api/sales-by-product/${query}`);
-    return response.data.data || response.data;
-  },
-
-  // Evolução mensal das vendas
-  getEvolution: async (months?: number): Promise<SalesEvolution[]> => {
-    const query = months ? `?months=${months}` : '';
-    const response = await api.get(`/api/sales-evolution/${query}`);
-    return response.data.data || response.data;
-  },
-
-  // Top produtos por lucro
-  getTopProducts: async (params?: { limit?: number; months?: number }): Promise<TopSalesProduct[]> => {
-    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
-    const response = await api.get(`/api/top-sales-products/${query}`);
-    return response.data.data || response.data;
   },
 };
 

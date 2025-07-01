@@ -19,6 +19,8 @@ Gráfico de Barras: Volume de vendas por produto/serviço.
 
 Gráfico de Linhas: Evolução do lucro das vendas ao longo do tempo.
 
+Gráfico de Rosca: Top 5 Clientes
+
 Insights e Indicadores Essenciais:
 
 Lucro Líquido das Vendas.
@@ -26,3 +28,5 @@ Lucro Líquido das Vendas.
 Melhores Produtos/Serviços (por lucro).
 
 Média de Vendas Diária/Semanal.
+
+Top 5 Clientes

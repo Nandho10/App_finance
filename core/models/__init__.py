@@ -4,5 +4,4 @@ from .transaction_models import *
 from .credit_models import *
 from .investment_models import *
 from .budget_models import *
-from .goal_models import *
-from .sales_models import Venda 
+from .goal_models import * 
